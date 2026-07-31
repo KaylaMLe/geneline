@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from geneline.types import Genome, Hyperparameters, ModelSpec, PipelineStep, ScoredGenome
+from geneline.utils.types import Genome, Hyperparameters, ModelSpec, PipelineStep, ScoredGenome
 
 
 @dataclass

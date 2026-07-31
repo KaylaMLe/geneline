@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
-from geneline.prompt import render_prompt
 from geneline.runner import MockRunner, ScriptedRunner, StepResult, run_pipeline
-from geneline.types import Genome, Hyperparameters, ModelSpec, PipelineStep
+from geneline.utils.prompt import render_prompt
+from geneline.utils.types import Genome, Hyperparameters, ModelSpec, PipelineStep
+
+EXAMPLE_MESSAGE = (
+    Path(__file__).resolve().parents[1] / "examples" / "message.txt"
+).read_text(encoding="utf-8").strip()
 
 
 def _step(prompt: str, model: str = "mock-fast") -> PipelineStep:
@@ -40,25 +45,41 @@ class PipelineTests(unittest.TestCase):
                 _step("Extract the main claim from this text: {{input}}"),
             ],
         )
+        # Canned step outputs stand in for model replies on the two-sentence example input.
         runner = ScriptedRunner(
             queue=[
-                StepResult(message="summary ABC", latency_ms=10, cost=0.001, total_tokens=20),
-                StepResult(message="claim XYZ", latency_ms=12, cost=0.002, total_tokens=22),
+                StepResult(
+                    message=(
+                        "GAs evolve candidates by selection, crossover, and mutation; "
+                        "fitness also weighs latency and cost."
+                    ),
+                    latency_ms=10,
+                    cost=0.001,
+                    total_tokens=20,
+                ),
+                StepResult(
+                    message=(
+                        "Genetic algorithms evolve candidates until a fitness goal "
+                        "that balances quality with resource cost."
+                    ),
+                    latency_ms=12,
+                    cost=0.002,
+                    total_tokens=22,
+                ),
             ]
         )
-        response = run_pipeline(runner, genome, "original message")
-        self.assertEqual(response.message, "claim XYZ")
+        response = run_pipeline(runner, genome, EXAMPLE_MESSAGE)
+        self.assertIn("fitness", response.message.lower())
         self.assertEqual(response.latency_ms, 22.0)
         self.assertEqual(response.cost, 0.003)
         self.assertEqual(response.total_tokens, 42)
-        # Second canned response was consumed; queue empty proves both steps ran.
         self.assertEqual(runner.queue, [])
 
     def test_mock_runner_is_deterministic_for_same_request(self) -> None:
         runner = MockRunner(seed=7)
         model = ModelSpec(name="mock-balanced", cost_per_token=0.00001)
         hp = Hyperparameters(temperature=0.4, top_p=0.9)
-        prompt = "Summarize this text: hello world"
+        prompt = f"Summarize this text: {EXAMPLE_MESSAGE}"
         a = runner.run_step(model=model, hyperparameters=hp, rendered_prompt=prompt)
         b = runner.run_step(model=model, hyperparameters=hp, rendered_prompt=prompt)
         self.assertEqual(a, b)
@@ -72,8 +93,8 @@ class PipelineTests(unittest.TestCase):
             ],
         )
         runner = MockRunner(seed=42)
-        first = run_pipeline(runner, genome, "Genetic algorithms are cool.")
-        second = run_pipeline(runner, genome, "Genetic algorithms are cool.")
+        first = run_pipeline(runner, genome, EXAMPLE_MESSAGE)
+        second = run_pipeline(runner, genome, EXAMPLE_MESSAGE)
         self.assertEqual(first.to_dict(), second.to_dict())
 
 

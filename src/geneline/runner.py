@@ -13,8 +13,8 @@ import random
 from dataclasses import dataclass
 from typing import Protocol
 
-from geneline.prompt import render_prompt
-from geneline.types import Genome, Hyperparameters, ModelSpec, Response
+from geneline.utils.prompt import render_prompt
+from geneline.utils.types import Genome, Hyperparameters, ModelSpec, Response
 
 
 # Ideal final claim used only by the mock quality metric.

@@ -2,15 +2,34 @@
 
 Genetic-algorithm automatic tuner for LLM pipeline genomes. Input and output are plain JSON files — no database.
 
-## Flow
+## Architecture
 
-1. Load a seed **pipeline genome** (`examples/genome.json`) and an input **message**.
-2. Expand into a generation of candidate genomes.
-3. Run each genome through a **mock LLM runner** (swap for a real provider later).
-4. **Score** on quality − latency penalty − cost penalty.
-5. **Evolve** the next generation (weighted selection, hyperparameter averages, exclusions, mutation).
-6. Repeat until `max_generations` or `goal_score`.
-7. Write `best_genome.json`, per-generation results, and `history.json`.
+```mermaid
+flowchart LR
+  cli[cli] -->|args| tuner[tuner]
+  tuner -->|logs| cli
+  subgraph utils [utils]
+    io[io]
+    prompt[prompt]
+    types[types]
+  end
+  subgraph tunerBox [tuner]
+    runner[runner]
+    scorer[scorer]
+    evolver[evolver]
+    runner -->|responses| scorer
+    scorer -->|scored genomes| evolver
+    evolver -->|next generation genomes| runner
+  end
+  cli --> tunerBox
+  tunerBox -.-> utils
+```
+
+1. **cli** passes paths/args into **tuner** and prints run logs.
+2. **runner** executes each genome in the current generation against the input text → responses.
+3. **scorer** turns those responses into fitness scores.
+4. **evolver** breeds the next generation of genomes (hypers only) and the loop repeats.
+5. **utils** (`io`, `prompt`, `types`) are shared helpers used across the package.
 
 Pipeline topology, task prompts, and model names are immutable. Tunable genes: `temperature` and `top_p` only.
 
@@ -30,7 +49,7 @@ PYTHONPATH=src python3 -m geneline --out runs/latest
 
 ## Genome shape
 
-Each step is a data-processing stage. Prompts are task templates with exactly one `{{input}}` placeholder (message.txt for step 1, previous step output thereafter) — not role/system personas.
+Each step is a data-processing stage. Prompts are task templates with exactly one `{{input}}` placeholder (message.txt for step 1, previous step output thereafter) — not role/system personas. `message.txt` is plain input data; instructions live only in the step prompts.
 
 ```json
 {
@@ -62,16 +81,18 @@ Each step is a data-processing stage. Prompts are task templates with exactly on
 ## Layout
 
 ```
-examples/          # seed genome, message, tuner config
+examples/                # seed genome, message, tuner config
 src/geneline/
-  types.py         # Genome / Response dataclasses
-  prompt.py        # {{input}} template rendering
-  runner.py        # Runner protocol, MockRunner, ScriptedRunner, pipeline orchestrator
-  scorer.py        # Multi-objective fitness
-  evolver.py       # Selection, crossover, mutation (hypers only)
-  tuner.py         # Main loop + JSON I/O orchestration
-  cli.py           # CLI entrypoint
-runs/              # Written artifacts (gitignored)
+  cli.py                 # CLI entrypoint
+  tuner.py               # Main loop orchestration
+  runner.py              # Runner protocol, mocks, pipeline chaining
+  scorer.py              # Multi-objective fitness
+  evolver.py             # Selection, crossover, mutation (hypers only)
+  utils/
+    io.py                # JSON / text file helpers
+    prompt.py            # {{input}} template rendering
+    types.py             # Genome / Response dataclasses
+runs/                    # Written artifacts (gitignored)
 ```
 
 ## Next hooks

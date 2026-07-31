@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from geneline.evolver import Evolver
-from geneline.io import read_json, read_text, write_json
 from geneline.runner import MockRunner, Runner, run_pipeline
 from geneline.scorer import Scorer
-from geneline.types import Genome, ModelSpec, ScoredGenome
+from geneline.utils.io import read_json, read_text, write_json
+from geneline.utils.types import Genome, ModelSpec, ScoredGenome
 
 
 @dataclass
