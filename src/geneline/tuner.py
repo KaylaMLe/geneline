@@ -9,7 +9,7 @@ from typing import Any
 
 from geneline.evolver import Evolver
 from geneline.io import read_json, read_text, write_json
-from geneline.runner import MockRunner
+from geneline.runner import MockRunner, Runner, run_pipeline
 from geneline.scorer import Scorer
 from geneline.types import Genome, ModelSpec, ScoredGenome
 
@@ -66,10 +66,10 @@ class TunerResult:
 
 
 class Tuner:
-    def __init__(self, config: TunerConfig) -> None:
+    def __init__(self, config: TunerConfig, runner: Runner | None = None) -> None:
         self.config = config
         self.rng = random.Random(config.seed)
-        self.runner = MockRunner(rng=random.Random(config.seed + 1))
+        self.runner: Runner = runner if runner is not None else MockRunner(seed=config.seed)
         self.scorer = Scorer(
             quality_weight=config.quality_weight,
             latency_weight=config.latency_weight,
@@ -79,7 +79,6 @@ class Tuner:
         )
         self.evolver = Evolver(
             population_size=config.population_size,
-            models=config.models or [],
             mutation_rate=config.mutation_rate,
             mutation_scale=config.mutation_scale,
             min_score_to_breed=config.min_score_to_breed,
@@ -92,7 +91,7 @@ class Tuner:
     ) -> list[ScoredGenome]:
         scored: list[ScoredGenome] = []
         for genome in population:
-            response = self.runner.run(genome, message)
+            response = run_pipeline(self.runner, genome, message)
             total, components = self.scorer.score(response)
             scored.append(
                 ScoredGenome(

@@ -12,12 +12,12 @@ Genetic-algorithm automatic tuner for LLM pipeline genomes. Input and output are
 6. Repeat until `max_generations` or `goal_score`.
 7. Write `best_genome.json`, per-generation results, and `history.json`.
 
-Prompts are treated as immutable for now. Tunable genes: `temperature`, `top_p`, and model choice.
+Pipeline topology, task prompts, and model names are immutable. Tunable genes: `temperature` and `top_p` only.
 
 ## Quick start
 
 ```bash
-cd /home/kayla/dev/Projects/geneline
+cd geneline
 python3 -m pip install -e .
 geneline --genome examples/genome.json --message examples/message.txt --config examples/config.json --out runs/latest
 ```
@@ -25,19 +25,26 @@ geneline --genome examples/genome.json --message examples/message.txt --config e
 Or without installing:
 
 ```bash
-PYTHONPATH=src python3 -m geneline.cli --out runs/latest
+PYTHONPATH=src python3 -m geneline --out runs/latest
 ```
 
 ## Genome shape
+
+Each step is a data-processing stage. Prompts are task templates with exactly one `{{input}}` placeholder (message.txt for step 1, previous step output thereafter) — not role/system personas.
 
 ```json
 {
   "id": "seed-0",
   "steps": [
     {
-      "prompt": "You are a concise technical writer...",
-      "model": { "name": "mock-fast", "cost_per_token": 0.000002 },
+      "prompt": "Summarize this text: {{input}}",
+      "model": { "name": "mock-balanced", "cost_per_token": 0.00001 },
       "hyperparameters": { "temperature": 0.4, "top_p": 0.9 }
+    },
+    {
+      "prompt": "Extract the main claim from this text: {{input}}",
+      "model": { "name": "mock-fast", "cost_per_token": 0.000002 },
+      "hyperparameters": { "temperature": 0.3, "top_p": 0.9 }
     }
   ]
 }
@@ -58,9 +65,10 @@ PYTHONPATH=src python3 -m geneline.cli --out runs/latest
 examples/          # seed genome, message, tuner config
 src/geneline/
   types.py         # Genome / Response dataclasses
-  runner.py        # Mock model execution
+  prompt.py        # {{input}} template rendering
+  runner.py        # Runner protocol, MockRunner, ScriptedRunner, pipeline orchestrator
   scorer.py        # Multi-objective fitness
-  evolver.py       # Selection, crossover, mutation
+  evolver.py       # Selection, crossover, mutation (hypers only)
   tuner.py         # Main loop + JSON I/O orchestration
   cli.py           # CLI entrypoint
 runs/              # Written artifacts (gitignored)
@@ -68,6 +76,6 @@ runs/              # Written artifacts (gitignored)
 
 ## Next hooks
 
-- Replace `MockRunner` with a real provider (OpenAI, Anthropic, etc.).
+- Add an OpenRouter (or other) `Runner` behind the same protocol; keep `MockRunner` / `ScriptedRunner` for tests.
 - Plug in a task-specific quality scorer instead of the mock overlap metric.
 - Allow prompt mutation once you want the genome’s text genes to evolve.

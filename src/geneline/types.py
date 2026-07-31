@@ -36,7 +36,12 @@ class Hyperparameters:
 
 @dataclass
 class PipelineStep:
-    """One pipeline stage. Prompt is immutable for now."""
+    """One data-processing stage.
+
+    ``prompt`` is an immutable task template with exactly one ``{{input}}``
+    placeholder (not a role/system persona). Model is immutable; only
+    hyperparameters evolve.
+    """
 
     prompt: str
     model: ModelSpec

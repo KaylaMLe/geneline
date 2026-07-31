@@ -44,18 +44,20 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     result = run_from_paths(args.genome, args.message, args.config, args.out)
     best = result.best
-    step = best.genome.steps[-1]
     print(f"stopped: {result.stopped_reason} after {result.generations_run} generation(s)")
     print(f"best score: {best.score}")
-    print(f"best genome: {best.genome.id}")
+    print(f"best genome: {best.genome.id} ({len(best.genome.steps)} steps)")
+    for index, step in enumerate(best.genome.steps, start=1):
+        print(
+            f"  step {index}: model={step.model.name}  "
+            f"temp={step.hyperparameters.temperature:.3f}  "
+            f"top_p={step.hyperparameters.top_p:.3f}"
+        )
     print(
-        f"model={step.model.name}  "
-        f"temp={step.hyperparameters.temperature:.3f}  "
-        f"top_p={step.hyperparameters.top_p:.3f}"
+        f"quality={best.components.get('quality')}  "
+        f"latency_ms={best.response.latency_ms}  "
+        f"cost={best.response.cost}"
     )
-    print(f"quality={best.components.get('quality')}  "
-          f"latency_ms={best.response.latency_ms}  "
-          f"cost={best.response.cost}")
     print(f"wrote JSON outputs to {args.out}")
     return 0
 

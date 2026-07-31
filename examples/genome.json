@@ -2,13 +2,24 @@
   "id": "seed-0",
   "steps": [
     {
-      "prompt": "You are a concise technical writer. Reply with only the requested summary.",
+      "prompt": "Summarize this text: {{input}}",
+      "model": {
+        "name": "mock-balanced",
+        "cost_per_token": 0.00001
+      },
+      "hyperparameters": {
+        "temperature": 0.4,
+        "top_p": 0.9
+      }
+    },
+    {
+      "prompt": "Extract the main claim from this text: {{input}}",
       "model": {
         "name": "mock-fast",
         "cost_per_token": 0.000002
       },
       "hyperparameters": {
-        "temperature": 0.4,
+        "temperature": 0.3,
         "top_p": 0.9
       }
     }
