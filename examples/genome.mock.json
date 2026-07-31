@@ -1,11 +1,11 @@
 {
-  "id": "seed-0",
+  "id": "seed-mock-0",
   "steps": [
     {
       "prompt": "Summarize this text: {{input}}",
       "model": {
-        "name": "openai/gpt-4o-mini",
-        "cost_per_token": 0.00000015
+        "name": "mock-balanced",
+        "cost_per_token": 0.00001
       },
       "hyperparameters": {
         "temperature": 0.4,
@@ -15,8 +15,8 @@
     {
       "prompt": "Extract the main claim from this text: {{input}}",
       "model": {
-        "name": "openai/gpt-4o-mini",
-        "cost_per_token": 0.00000015
+        "name": "mock-fast",
+        "cost_per_token": 0.000002
       },
       "hyperparameters": {
         "temperature": 0.3,

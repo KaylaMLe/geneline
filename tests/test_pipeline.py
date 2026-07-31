@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from geneline.runner import MockRunner, ScriptedRunner, StepResult, run_pipeline
+from geneline.runners import MockRunner, ScriptedRunner, StepResult, run_pipeline
 from geneline.utils.prompt import render_prompt
 from geneline.utils.types import Genome, Hyperparameters, ModelSpec, PipelineStep
 

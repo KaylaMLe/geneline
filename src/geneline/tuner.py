@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from geneline.evolver import Evolver
-from geneline.runner import MockRunner, Runner, run_pipeline
+from geneline.runners import Runner, RunnerName, build_runner, run_pipeline
 from geneline.scorer import Scorer
 from geneline.utils.io import read_json, read_text, write_json
 from geneline.utils.types import Genome, ModelSpec, ScoredGenome
@@ -30,15 +30,17 @@ class TunerConfig:
     cost_ref: float = 0.002
     seed: int = 42
     models: list[ModelSpec] | None = None
+    runner: RunnerName = "openrouter"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TunerConfig:
         weights = data.get("weights", {})
         models_raw = data.get("models") or [
-            {"name": "mock-fast", "cost_per_token": 0.000002},
-            {"name": "mock-balanced", "cost_per_token": 0.00001},
-            {"name": "mock-quality", "cost_per_token": 0.00005},
+            {"name": "openai/gpt-4o-mini", "cost_per_token": 0.00000015},
         ]
+        runner = str(data.get("runner", "openrouter")).lower()
+        if runner not in ("mock", "openrouter"):
+            raise ValueError(f"unsupported runner: {runner!r}")
         return cls(
             population_size=int(data.get("population_size", 6)),
             max_generations=int(data.get("max_generations", 5)),
@@ -54,6 +56,7 @@ class TunerConfig:
             cost_ref=float(data.get("cost_ref", 0.002)),
             seed=int(data.get("seed", 42)),
             models=[ModelSpec.from_dict(item) for item in models_raw],
+            runner=runner,  # type: ignore[arg-type]
         )
 
 
@@ -69,7 +72,9 @@ class Tuner:
     def __init__(self, config: TunerConfig, runner: Runner | None = None) -> None:
         self.config = config
         self.rng = random.Random(config.seed)
-        self.runner: Runner = runner if runner is not None else MockRunner(seed=config.seed)
+        self.runner: Runner = (
+            runner if runner is not None else build_runner(config.runner, seed=config.seed)
+        )
         self.scorer = Scorer(
             quality_weight=config.quality_weight,
             latency_weight=config.latency_weight,
@@ -149,12 +154,16 @@ def run_from_paths(
     message_path: str | Path,
     config_path: str | Path,
     out_dir: str | Path,
+    *,
+    runner: RunnerName | None = None,
 ) -> TunerResult:
     """Read JSON/text inputs, run the tuner, write JSON outputs under out_dir."""
     out = Path(out_dir)
     seed = Genome.from_dict(read_json(genome_path))
     message = read_text(message_path)
     config = TunerConfig.from_dict(read_json(config_path))
+    if runner is not None:
+        config.runner = runner
 
     result = Tuner(config).run(seed, message)
 
@@ -168,11 +177,11 @@ def run_from_paths(
             "genome": result.best.genome.to_dict(),
             "stopped_reason": result.stopped_reason,
             "generations_run": result.generations_run,
+            "runner": config.runner,
         },
     )
     write_json(out / "history.json", result.history)
 
-    # Also emit per-generation result files for easy inspection.
     for entry in result.history:
         gen = entry["generation"]
         write_json(out / f"generation_{gen}_results.json", entry["results"])
