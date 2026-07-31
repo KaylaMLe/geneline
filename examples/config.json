@@ -1,0 +1,22 @@
+{
+  "population_size": 6,
+  "max_generations": 5,
+  "goal_score": 0.5,
+  "min_score_to_breed": 0.2,
+  "mutation_rate": 0.35,
+  "mutation_scale": 0.15,
+  "elite_count": 1,
+  "weights": {
+    "quality": 1.0,
+    "latency": 0.25,
+    "cost": 0.25
+  },
+  "latency_ref_ms": 800,
+  "cost_ref": 0.002,
+  "seed": 42,
+  "models": [
+    { "name": "mock-fast", "cost_per_token": 0.000002 },
+    { "name": "mock-balanced", "cost_per_token": 0.00001 },
+    { "name": "mock-quality", "cost_per_token": 0.00005 }
+  ]
+}

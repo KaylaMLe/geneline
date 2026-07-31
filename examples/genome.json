@@ -1,0 +1,16 @@
+{
+  "id": "seed-0",
+  "steps": [
+    {
+      "prompt": "You are a concise technical writer. Reply with only the requested summary.",
+      "model": {
+        "name": "mock-fast",
+        "cost_per_token": 0.000002
+      },
+      "hyperparameters": {
+        "temperature": 0.4,
+        "top_p": 0.9
+      }
+    }
+  ]
+}

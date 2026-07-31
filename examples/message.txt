@@ -1,0 +1,1 @@
+Summarize the following in one sentence: Genetic algorithms evolve candidate solutions by selection, crossover, and mutation until a fitness goal is met.
