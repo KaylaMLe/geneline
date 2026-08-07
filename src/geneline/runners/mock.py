@@ -29,7 +29,9 @@ class MockRunner:
         model: ModelSpec,
         hyperparameters: Hyperparameters,
         rendered_prompt: str,
+        label: str | None = None,
     ) -> StepResult:
+        del label  # accepted for Runner protocol / parallel logging
         hp = hyperparameters.clamped()
         digest = hashlib.sha256(
             f"{self.seed}|{model.name}|{hp.temperature:.6f}|{hp.top_p:.6f}|{rendered_prompt}".encode()
@@ -103,7 +105,9 @@ class ScriptedRunner:
         model: ModelSpec,
         hyperparameters: Hyperparameters,
         rendered_prompt: str,
+        label: str | None = None,
     ) -> StepResult:
+        del label
         if self.by_prompt is not None and rendered_prompt in self.by_prompt:
             return self.by_prompt[rendered_prompt]
         if self.queue:

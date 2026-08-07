@@ -25,5 +25,6 @@ class Runner(Protocol):
         model: ModelSpec,
         hyperparameters: Hyperparameters,
         rendered_prompt: str,
+        label: str | None = None,
     ) -> StepResult:
         """Execute one data-processing step against an already-rendered prompt."""

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 from typing import Any
 
+from geneline import progress
 from geneline.runners.protocol import StepResult
 from geneline.utils.types import Hyperparameters, ModelSpec
 
@@ -54,6 +55,7 @@ class OpenRouterRunner:
         model: ModelSpec,
         hyperparameters: Hyperparameters,
         rendered_prompt: str,
+        label: str | None = None,
     ) -> StepResult:
         hp = hyperparameters.clamped()
         payload = {
@@ -64,9 +66,16 @@ class OpenRouterRunner:
             "max_tokens": self.max_tokens,
             "usage": {"include": True},
         }
+        prefix = f"{label} " if label else ""
         started = time.perf_counter()
+        progress.log(
+            f"    {prefix}openrouter call model={model.name} "
+            f"temp={hp.temperature:.3f} top_p={hp.top_p:.3f} "
+            f"(waiting up to {self.timeout_s:.0f}s)..."
+        )
         data = self._post_chat(payload)
         latency_ms = (time.perf_counter() - started) * 1000.0
+        progress.log(f"    {prefix}openrouter call finished in {latency_ms:.0f}ms")
 
         message = _extract_message(data)
         usage = data.get("usage") or {}

@@ -2,6 +2,7 @@
   "runner": "mock",
   "population_size": 6,
   "max_generations": 5,
+  "max_parallel_genomes": 4,
   "goal_score": 0.35,
   "min_score_to_breed": 0.05,
   "mutation_rate": 0.35,

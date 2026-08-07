@@ -28,12 +28,12 @@ flowchart LR
 
 
 1. **cli** passes paths/args into **tuner** and prints run logs.
-2. **runners** execute each genome in the current generation against the input text → responses (`openrouter` by default; `mock` / `scripted` for offline tests).
+2. **runners** execute each genome in the current generation against the input text → responses (`openrouter` by default; `mock` / `scripted` for offline tests). Genomes in a generation run **in parallel** (up to `max_parallel_genomes`); steps inside one genome stay sequential.
 3. **scorer** turns those responses into fitness scores.
 4. **evolver** breeds the next generation of genomes (hypers only) and the loop repeats.
 5. **utils** (`io`, `prompt`, `types`) are shared helpers used across the package.
 
-Pipeline topology, task prompts, and model names are immutable. Tunable genes: `temperature` and `top_p` only.
+Pipeline topology, task prompts, and model names are immutable. Tunable genes: `temperature` and `top_p` only. Parallelism uses the stdlib thread pool — no extra packages beyond `uv sync`.
 
 ## Setup
 
@@ -62,6 +62,23 @@ uv sync                   # make the venv match pyproject.toml
 cd /path/to/geneline
 PYTHONPATH=src python -m ...
 ```
+
+### Config
+
+Tuner settings live in JSON (default: `examples/config.json`; mock: `examples/config.mock.json`). Important knobs:
+
+| Key | Role |
+|-----|------|
+| `runner` | `openrouter` (default) or `mock` |
+| `population_size` / `max_generations` | Search budget |
+| `max_parallel_genomes` | Cap concurrent genome evals within a generation |
+| `goal_score` | Early stop when best score reaches this |
+| `weights.quality` / `weights.latency` / `weights.cost` | Fitness = quality − latency penalty − cost penalty |
+| `latency_ref_ms` / `cost_ref` | Scale for those penalties |
+
+**Latency:** each model call still records wall-clock latency in logs/JSON. Scoring **downweights** it in the OpenRouter example (`weights.latency: 0.05`) because API jitter dominates fitness when quality is flat. Set `"latency": 0` to ignore latency in the score entirely.
+
+**Cost:** prefers OpenRouter `usage.cost`, falling back to `total_tokens * cost_per_token` from the genome.
 
 ## Commands
 
@@ -99,8 +116,6 @@ geneline \
   --config examples/config.json \
   --out runs/latest
 ```
-
-Latency is wall-clock. Cost prefers OpenRouter `usage.cost`, falling back to `total_tokens * cost_per_token` from the genome.
 
 ## Genome shape
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from geneline import progress
 from geneline.runners.mock import REFERENCE_CLAIM, MockRunner, ScriptedRunner, mock_fidelity
 from geneline.runners.openrouter import OpenRouterError, OpenRouterRunner, load_api_key
 from geneline.runners.protocol import Runner, StepResult
@@ -34,11 +35,18 @@ def build_runner(name: RunnerName, *, seed: int = 0) -> Runner:
     raise ValueError(f"unsupported runner: {name!r}")
 
 
-def run_pipeline(runner: Runner, genome: Genome, message: str) -> Response:
+def run_pipeline(
+    runner: Runner,
+    genome: Genome,
+    message: str,
+    *,
+    label: str | None = None,
+) -> Response:
     """Render {{input}} → run_step → chain outputs; aggregate metrics; score final text."""
     if not genome.steps:
         raise ValueError("genome must contain at least one step")
 
+    prefix = f"{label} " if label else ""
     incoming = message
     total_latency = 0.0
     total_cost = 0.0
@@ -46,12 +54,16 @@ def run_pipeline(runner: Runner, genome: Genome, message: str) -> Response:
     final_message = ""
     last_step = genome.steps[-1]
 
-    for step in genome.steps:
+    for step_index, step in enumerate(genome.steps, start=1):
+        progress.log(
+            f"    {prefix}step {step_index}/{len(genome.steps)} model={step.model.name}"
+        )
         rendered = render_prompt(step.prompt, incoming)
         result = runner.run_step(
             model=step.model,
             hyperparameters=step.hyperparameters.clamped(),
             rendered_prompt=rendered,
+            label=label,
         )
         incoming = result.message
         final_message = result.message

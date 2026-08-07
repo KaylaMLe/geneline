@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from geneline import progress
 from geneline.evolver import Evolver
 from geneline.runners import Runner, RunnerName, build_runner, run_pipeline
 from geneline.scorer import Scorer
@@ -31,6 +33,7 @@ class TunerConfig:
     seed: int = 42
     models: list[ModelSpec] | None = None
     runner: RunnerName = "openrouter"
+    max_parallel_genomes: int = 8
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TunerConfig:
@@ -57,6 +60,7 @@ class TunerConfig:
             seed=int(data.get("seed", 42)),
             models=[ModelSpec.from_dict(item) for item in models_raw],
             runner=runner,  # type: ignore[arg-type]
+            max_parallel_genomes=max(1, int(data.get("max_parallel_genomes", 8))),
         )
 
 
@@ -91,56 +95,147 @@ class Tuner:
             rng=self.rng,
         )
 
+    def _evaluate_one(
+        self,
+        index: int,
+        total: int,
+        genome: Genome,
+        message: str,
+    ) -> tuple[int, ScoredGenome]:
+        label = f"[{index}/{total} {genome.id}]"
+        progress.log(
+            f"  genome {index}/{total} id={genome.id} "
+            f"({len(genome.steps)} steps) — starting"
+        )
+        timer = progress.Timer()
+        try:
+            response = run_pipeline(self.runner, genome, message, label=label)
+        except Exception as exc:
+            raise RuntimeError(
+                f"genome evaluation failed for id={genome.id} (index {index}/{total}): {exc}"
+            ) from exc
+        total_score, components = self.scorer.score(response)
+        scored = ScoredGenome(
+            genome=genome,
+            score=round(total_score, 4),
+            response=response,
+            components=components,
+        )
+        progress.log(
+            f"  genome {index}/{total} id={genome.id} done in "
+            f"{timer.elapsed_s():.1f}s  score={scored.score}  "
+            f"latency_ms={response.latency_ms}  cost={response.cost}"
+        )
+        return index, scored
+
     def evaluate_generation(
-        self, population: list[Genome], message: str
+        self,
+        population: list[Genome],
+        message: str,
+        *,
+        generation: int,
+        max_generations: int,
     ) -> list[ScoredGenome]:
-        scored: list[ScoredGenome] = []
-        for genome in population:
-            response = run_pipeline(self.runner, genome, message)
-            total, components = self.scorer.score(response)
-            scored.append(
-                ScoredGenome(
-                    genome=genome,
-                    score=round(total, 4),
-                    response=response,
-                    components=components,
+        total = len(population)
+        workers = min(self.config.max_parallel_genomes, total)
+        progress.log(
+            f"generation {generation + 1}/{max_generations}: "
+            f"evaluating {total} genome(s) (parallelism={workers})"
+        )
+
+        results_by_index: dict[int, ScoredGenome] = {}
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(self._evaluate_one, index, total, genome, message): index
+                for index, genome in enumerate(population, start=1)
+            }
+            completed = 0
+            for future in as_completed(futures):
+                index, scored = future.result()
+                results_by_index[index] = scored
+                completed += 1
+                progress.log(
+                    f"  completed {completed}/{total} "
+                    f"(latest id={scored.genome.id} score={scored.score})"
                 )
-            )
-        return scored
+
+        return [results_by_index[i] for i in range(1, total + 1)]
 
     def run(self, seed_genome: Genome, message: str) -> TunerResult:
         population = self.evolver.seed_population(seed_genome)
         best: ScoredGenome | None = None
         history: list[dict[str, Any]] = []
         stopped_reason = "max_generations_reached"
+        steps_per_genome = max(1, len(seed_genome.steps))
+        max_api_calls = (
+            self.config.population_size
+            * self.config.max_generations
+            * steps_per_genome
+        )
+        progress.log(
+            f"tuner start  runner={self.config.runner}  "
+            f"population={self.config.population_size}  "
+            f"max_generations={self.config.max_generations}  "
+            f"max_parallel_genomes={self.config.max_parallel_genomes}  "
+            f"goal_score={self.config.goal_score}  "
+            f"steps/genome={steps_per_genome}  "
+            f"up to ~{max_api_calls} model calls"
+        )
+        run_timer = progress.Timer()
 
         for generation in range(self.config.max_generations):
-            results = self.evaluate_generation(population, message)
+            results = self.evaluate_generation(
+                population,
+                message,
+                generation=generation,
+                max_generations=self.config.max_generations,
+            )
             results.sort(key=lambda item: item.score, reverse=True)
             generation_best = results[0]
+            mean_score = round(sum(item.score for item in results) / len(results), 4)
             if best is None or generation_best.score > best.score:
                 best = generation_best
+                progress.log(
+                    f"generation {generation + 1}: new global best "
+                    f"score={best.score} id={best.genome.id}  mean={mean_score}"
+                )
+            else:
+                progress.log(
+                    f"generation {generation + 1}: "
+                    f"best_this_gen={generation_best.score}  "
+                    f"global_best={best.score}  mean={mean_score}"
+                )
 
             history.append(
                 {
                     "generation": generation,
                     "best_score": generation_best.score,
                     "best_genome_id": generation_best.genome.id,
-                    "mean_score": round(
-                        sum(item.score for item in results) / len(results), 4
-                    ),
+                    "mean_score": mean_score,
                     "results": [item.to_dict() for item in results],
                 }
             )
 
             if best.score >= self.config.goal_score:
                 stopped_reason = "goal_score_achieved"
+                progress.log(
+                    f"goal score {self.config.goal_score} reached "
+                    f"(best={best.score}); stopping"
+                )
                 break
 
             if generation < self.config.max_generations - 1:
+                progress.log(
+                    f"generation {generation + 1}: evolving next population..."
+                )
                 population = self.evolver.next_generation(results)
 
         assert best is not None
+        progress.log(
+            f"tuner done in {run_timer.elapsed_s():.1f}s  "
+            f"reason={stopped_reason}  generations={len(history)}  "
+            f"best_score={best.score}"
+        )
         return TunerResult(
             best=best,
             generations_run=len(history),
