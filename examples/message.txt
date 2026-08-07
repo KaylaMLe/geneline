@@ -1,1 +1,8 @@
-Genetic algorithms evolve candidate solutions by selection, crossover, and mutation until a fitness goal is met. Fitness blends solution quality with resource costs such as latency and spend.
+item | price_usd
+sneakers | 60
+white gloves | 20
+high heels | 100
+flats | 40
+running shoes | 80
+canvas belt | 25
+baseball cap | 15

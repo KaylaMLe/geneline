@@ -2,7 +2,7 @@
   "id": "seed-mock-0",
   "steps": [
     {
-      "prompt": "Summarize this text: {{input}}",
+      "prompt": "From the inventory below, get the average price of all shoes (sneakers, high heels, flats, running shoes, and similar footwear count; ignore accessories like belts, hats, and gloves). Round to 2 decimal places. Reply with a plain number only — no dollar sign.\n\n{{input}}",
       "model": {
         "name": "mock-balanced",
         "cost_per_token": 0.00001
@@ -13,7 +13,7 @@
       }
     },
     {
-      "prompt": "Extract the main claim from this text: {{input}}",
+      "prompt": "Take this average shoe price and add a 10% sales tax. Round to 2 decimal places. Reply with a plain number only — no dollar sign.\n\n{{input}}",
       "model": {
         "name": "mock-fast",
         "cost_per_token": 0.000002

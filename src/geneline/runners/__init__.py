@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import Literal
 
 from geneline import progress
-from geneline.runners.mock import REFERENCE_CLAIM, MockRunner, ScriptedRunner, mock_fidelity
+from geneline.quality import QualityJudge, build_quality_judge
+from geneline.quality.protocol import QualityContext
+from geneline.runners.mock import MockRunner, ScriptedRunner
 from geneline.runners.openrouter import OpenRouterError, OpenRouterRunner, load_api_key
 from geneline.runners.protocol import Runner, StepResult
 from geneline.utils.prompt import render_prompt
-from geneline.utils.types import Genome, ModelSpec, Response
+from geneline.utils.types import Genome, Response
 
 RunnerName = Literal["mock", "openrouter"]
 
@@ -41,11 +43,13 @@ def run_pipeline(
     message: str,
     *,
     label: str | None = None,
+    quality_judge: QualityJudge | None = None,
 ) -> Response:
     """Render {{input}} → run_step → chain outputs; aggregate metrics; score final text."""
     if not genome.steps:
         raise ValueError("genome must contain at least one step")
 
+    judge = quality_judge if quality_judge is not None else build_quality_judge()
     prefix = f"{label} " if label else ""
     incoming = message
     total_latency = 0.0
@@ -71,11 +75,16 @@ def run_pipeline(
         total_cost += result.cost
         total_tokens += result.total_tokens
 
-    quality = _score_quality(
+    hp = last_step.hyperparameters.clamped()
+    quality = judge.score(
         final_message,
-        last_step.model,
-        last_step.hyperparameters.clamped().temperature,
-        last_step.hyperparameters.clamped().top_p,
+        context=QualityContext(
+            input_message=message,
+            genome=genome,
+            model=last_step.model,
+            temperature=hp.temperature,
+            top_p=hp.top_p,
+        ),
     )
 
     return Response(
@@ -85,18 +94,3 @@ def run_pipeline(
         total_tokens=total_tokens,
         quality=round(quality, 4),
     )
-
-
-def _score_quality(
-    text: str,
-    model: ModelSpec,
-    temperature: float,
-    top_p: float,
-) -> float:
-    ref_tokens = set(REFERENCE_CLAIM.lower().split())
-    out_tokens = set(text.lower().split())
-    overlap = len(ref_tokens & out_tokens) / max(1, len(ref_tokens))
-    if not model.name.startswith("mock-"):
-        return max(0.0, min(1.0, overlap))
-    fidelity = mock_fidelity(model, temperature, top_p)
-    return max(0.0, min(1.0, 0.55 * overlap + 0.45 * fidelity))

@@ -50,8 +50,7 @@ class Evolver:
             parent_a = self._weighted_pick(breedable)
             parent_b = self._weighted_pick(breedable)
             child = self.crossover(parent_a.genome, parent_b.genome)
-            if self.rng.random() < self.mutation_rate:
-                child = self.mutate(child)
+            child = self.mutate(child)
             next_pop.append(child)
 
         return next_pop

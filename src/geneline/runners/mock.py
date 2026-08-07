@@ -10,11 +10,14 @@ from dataclasses import dataclass
 from geneline.runners.protocol import StepResult
 from geneline.utils.types import Hyperparameters, ModelSpec
 
-# Ideal final claim used by the mock text generator / mock quality blend.
+# Ideal final claim used by legacy OverlapJudge regression tests.
 REFERENCE_CLAIM = (
     "Genetic algorithms evolve candidates via selection, crossover, and mutation "
     "until a fitness goal is reached."
 )
+
+CORRECT_AVERAGE = "70.00"
+CORRECT_TAXED = "77.00"
 
 
 @dataclass
@@ -75,21 +78,29 @@ class MockRunner:
         rng: random.Random,
     ) -> str:
         fidelity = mock_fidelity(model, temperature, top_p)
-        words = REFERENCE_CLAIM.split()
-        keep = max(4, int(len(words) * fidelity))
-        kept = words[:keep]
+        lower = rendered_prompt.lower()
+        is_tax = "sales tax" in lower or "10%" in lower
+        is_average = "average" in lower and "shoe" in lower
 
-        if fidelity < 0.75:
-            noise = ["roughly", "perhaps", "sort of", "maybe", "kinda"]
-            kept.insert(rng.randint(0, len(kept)), rng.choice(noise))
-        if fidelity < 0.55:
-            kept.append("etc.")
+        if is_tax:
+            correct = CORRECT_TAXED
+            wrong = "70.00"
+        elif is_average:
+            correct = CORRECT_AVERAGE
+            wrong = "63.33"
+        else:
+            correct = CORRECT_TAXED
+            wrong = "12.00"
 
-        if "Extract" in rendered_prompt and fidelity >= 0.7:
-            return " ".join(kept)
-        if "Summarize" in rendered_prompt and fidelity >= 0.65:
-            return " ".join(kept)
-        return " ".join(kept)
+        if fidelity >= 0.75:
+            return correct if rng.random() < fidelity else f"${correct}"
+        if fidelity >= 0.55:
+            if rng.random() < 0.5:
+                return f"The answer is {correct}"
+            return f"${correct}"
+        if rng.random() < 0.4:
+            return f"roughly {wrong} or so"
+        return wrong
 
 
 @dataclass

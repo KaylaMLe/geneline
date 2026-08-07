@@ -75,8 +75,21 @@ Tuner settings live in JSON (default: `examples/config.json`; mock: `examples/co
 | `goal_score` | Early stop when best score reaches this |
 | `weights.quality` / `weights.latency` / `weights.cost` | Fitness = quality − latency penalty − cost penalty |
 | `latency_ref_ms` / `cost_ref` | Scale for those penalties |
+| `quality.judge` | How final pipeline text is scored (see below) |
+| `mutation_rate` | Per-gene chance to nudge temperature or top_p (applied to every child) |
 
-**Latency:** each model call still records wall-clock latency in logs/JSON. Scoring **downweights** it in the OpenRouter example (`weights.latency: 0.05`) because API jitter dominates fitness when quality is flat. Set `"latency": 0` to ignore latency in the score entirely.
+**Quality judges** (`quality` object in config):
+
+| `quality.judge` | Behavior |
+|-----------------|----------|
+| `answer` (default) | Numeric ground-truth check. Path via `quality.answer_path` (example: `examples/quality.answer.json`). Perfect score requires a bare number (no `$`) within tolerance of `expected`. |
+| `constraints` | Legacy offline rubric: required term groups, forbidden hedges, length caps |
+| `overlap` | Legacy bag-of-words overlap with a fixed reference claim (plus mock fidelity for `mock-*`) |
+| `llm` | Reserved for a future LLM-as-judge; raises `NotImplementedError` today |
+
+The default example averages shoe prices from an inventory in `message.txt` (synonyms like sneakers/heels; ignore accessories), then applies 10% tax. Step-1 average is `70`; **final** gold (what `AnswerJudge` scores) is `70 × 1.10 = 77` / `77.00`.
+
+**Latency:** each model call still records wall-clock latency in logs/JSON. Scoring **downweights** it in the OpenRouter example (`weights.latency: 0.05`) so API jitter does not dominate when quality already separates candidates. Set `"latency": 0` to ignore latency in the score entirely.
 
 **Cost:** prefers OpenRouter `usage.cost`, falling back to `total_tokens * cost_per_token` from the genome.
 
@@ -119,19 +132,19 @@ geneline \
 
 ## Genome shape
 
-Each step is a data-processing stage. Prompts are task templates with exactly one `{{input}}` placeholder (message.txt for step 1, previous step output thereafter) — not role/system personas. `message.txt` is plain input data; instructions live only in the step prompts.
+Each step is a data-processing stage. Prompts are task templates with exactly one `{{input}}` placeholder (`message.txt` for step 1, previous step output thereafter) — not role/system personas. Steady task/format rules live in the step prompts; `message.txt` holds the product inventory data.
 
 ```json
 {
   "id": "seed-0",
   "steps": [
     {
-      "prompt": "Summarize this text: {{input}}",
+      "prompt": "From the inventory below, get the average price of all shoes (...). Round to 2 decimal places. Reply with a plain number only — no dollar sign.\\n\\n{{input}}",
       "model": { "name": "openai/gpt-4o-mini", "cost_per_token": 0.00000015 },
       "hyperparameters": { "temperature": 0.4, "top_p": 0.9 }
     },
     {
-      "prompt": "Extract the main claim from this text: {{input}}",
+      "prompt": "Take this average shoe price and add a 10% sales tax. Round to 2 decimal places. Reply with a plain number only — no dollar sign.\\n\\n{{input}}",
       "model": { "name": "openai/gpt-4o-mini", "cost_per_token": 0.00000015 },
       "hyperparameters": { "temperature": 0.3, "top_p": 0.9 }
     }
@@ -163,6 +176,7 @@ src/geneline/
   tuner.py               # Main loop orchestration
   scorer.py              # Multi-objective fitness
   evolver.py             # Selection, crossover, mutation (hypers only)
+  quality/               # Pluggable quality judges (answer, constraints, …)
   runners/
     __init__.py          # Protocol re-exports, run_pipeline, build_runner
     protocol.py          # Runner + StepResult
@@ -179,7 +193,7 @@ runs/                    # Written artifacts (gitignored)
 
 ## Next hooks
 
-- Plug in a task-specific quality scorer instead of the lexical-overlap metric.
+- Implement the live LLM-as-judge path for open-ended tasks without a numeric gold answer.
 - Allow prompt mutation once you want the genome’s text genes to evolve.
 - Optionally mutate model choice among a configured OpenRouter allow-list.
 

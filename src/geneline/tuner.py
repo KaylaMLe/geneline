@@ -10,6 +10,7 @@ from typing import Any
 
 from geneline import progress
 from geneline.evolver import Evolver
+from geneline.quality import QualityJudge, build_quality_judge
 from geneline.runners import Runner, RunnerName, build_runner, run_pipeline
 from geneline.scorer import Scorer
 from geneline.utils.io import read_json, read_text, write_json
@@ -34,6 +35,7 @@ class TunerConfig:
     models: list[ModelSpec] | None = None
     runner: RunnerName = "openrouter"
     max_parallel_genomes: int = 8
+    quality: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TunerConfig:
@@ -44,6 +46,9 @@ class TunerConfig:
         runner = str(data.get("runner", "openrouter")).lower()
         if runner not in ("mock", "openrouter"):
             raise ValueError(f"unsupported runner: {runner!r}")
+        quality = data.get("quality")
+        if quality is not None and not isinstance(quality, dict):
+            raise ValueError("config.quality must be an object")
         return cls(
             population_size=int(data.get("population_size", 6)),
             max_generations=int(data.get("max_generations", 5)),
@@ -61,6 +66,7 @@ class TunerConfig:
             models=[ModelSpec.from_dict(item) for item in models_raw],
             runner=runner,  # type: ignore[arg-type]
             max_parallel_genomes=max(1, int(data.get("max_parallel_genomes", 8))),
+            quality=quality,
         )
 
 
@@ -73,11 +79,21 @@ class TunerResult:
 
 
 class Tuner:
-    def __init__(self, config: TunerConfig, runner: Runner | None = None) -> None:
+    def __init__(
+        self,
+        config: TunerConfig,
+        runner: Runner | None = None,
+        quality_judge: QualityJudge | None = None,
+    ) -> None:
         self.config = config
         self.rng = random.Random(config.seed)
         self.runner: Runner = (
             runner if runner is not None else build_runner(config.runner, seed=config.seed)
+        )
+        self.quality_judge = (
+            quality_judge
+            if quality_judge is not None
+            else build_quality_judge(config.quality)
         )
         self.scorer = Scorer(
             quality_weight=config.quality_weight,
@@ -109,7 +125,13 @@ class Tuner:
         )
         timer = progress.Timer()
         try:
-            response = run_pipeline(self.runner, genome, message, label=label)
+            response = run_pipeline(
+                self.runner,
+                genome,
+                message,
+                label=label,
+                quality_judge=self.quality_judge,
+            )
         except Exception as exc:
             raise RuntimeError(
                 f"genome evaluation failed for id={genome.id} (index {index}/{total}): {exc}"
@@ -124,6 +146,7 @@ class Tuner:
         progress.log(
             f"  genome {index}/{total} id={genome.id} done in "
             f"{timer.elapsed_s():.1f}s  score={scored.score}  "
+            f"quality={response.quality}  "
             f"latency_ms={response.latency_ms}  cost={response.cost}"
         )
         return index, scored

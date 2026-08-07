@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from geneline.runners import MockRunner
 from geneline.tuner import Tuner, TunerConfig
+from geneline.utils.io import read_json
 from geneline.utils.types import Genome, Hyperparameters, ModelSpec, PipelineStep
+
+ROOT = Path(__file__).resolve().parents[1]
+EXAMPLE_MESSAGE = (ROOT / "examples" / "message.txt").read_text(encoding="utf-8").strip()
+ANSWER_PATH = str(ROOT / "examples" / "quality.answer.json")
+SEED_PROMPT = Genome.from_dict(read_json(ROOT / "examples" / "genome.mock.json")).steps[0].prompt
+TAX_PROMPT = Genome.from_dict(read_json(ROOT / "examples" / "genome.mock.json")).steps[1].prompt
 
 
 def _genome(genome_id: str, temp: float = 0.4) -> Genome:
@@ -14,12 +22,12 @@ def _genome(genome_id: str, temp: float = 0.4) -> Genome:
         id=genome_id,
         steps=[
             PipelineStep(
-                prompt="Summarize this text: {{input}}",
+                prompt=SEED_PROMPT,
                 model=ModelSpec(name="mock-balanced", cost_per_token=0.00001),
                 hyperparameters=Hyperparameters(temperature=temp, top_p=0.9),
             ),
             PipelineStep(
-                prompt="Extract the main claim from this text: {{input}}",
+                prompt=TAX_PROMPT,
                 model=ModelSpec(name="mock-fast", cost_per_token=0.000002),
                 hyperparameters=Hyperparameters(temperature=0.3, top_p=0.9),
             ),
@@ -36,12 +44,13 @@ class ParallelEvalTests(unittest.TestCase):
             max_parallel_genomes=4,
             runner="mock",
             seed=7,
+            quality={"judge": "answer", "answer_path": ANSWER_PATH},
         )
         tuner = Tuner(config, runner=MockRunner(seed=7))
         population = [_genome(f"g-{i}", temp=0.3 + 0.05 * i) for i in range(4)]
         results = tuner.evaluate_generation(
             population,
-            "Genetic algorithms evolve candidates.",
+            EXAMPLE_MESSAGE,
             generation=0,
             max_generations=1,
         )
@@ -58,9 +67,10 @@ class ParallelEvalTests(unittest.TestCase):
             runner="mock",
             seed=3,
             min_score_to_breed=0.0,
+            quality={"judge": "answer", "answer_path": ANSWER_PATH},
         )
         tuner = Tuner(config, runner=MockRunner(seed=3))
-        result = tuner.run(_genome("seed"), "Genetic algorithms evolve candidates.")
+        result = tuner.run(_genome("seed"), EXAMPLE_MESSAGE)
         self.assertGreaterEqual(result.generations_run, 1)
         self.assertIsNotNone(result.best)
 
