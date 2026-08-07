@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from dotenv import load_dotenv
 from typing import Any
 
 from geneline.runners.protocol import StepResult
@@ -15,6 +16,8 @@ from geneline.utils.types import Hyperparameters, ModelSpec
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 ENV_API_KEY = "OPENROUTER_API_KEY"
+
+load_dotenv()
 
 
 class OpenRouterError(RuntimeError):

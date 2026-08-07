@@ -25,6 +25,8 @@ flowchart LR
   tunerBox -.-> utils
 ```
 
+
+
 1. **cli** passes paths/args into **tuner** and prints run logs.
 2. **runners** execute each genome in the current generation against the input text → responses (`openrouter` by default; `mock` / `scripted` for offline tests).
 3. **scorer** turns those responses into fitness scores.
@@ -35,33 +37,43 @@ Pipeline topology, task prompts, and model names are immutable. Tunable genes: `
 
 ## Setup
 
-From the repo root, pick one:
+From the repo root, prefer **uv** so installs stay in sync with `pyproject.toml` (avoids “I pip-installed a package and forgot to declare it”).
 
-**Option A — no install.** Prefix Python commands with `PYTHONPATH=src` so the package imports without installing:
+Install uv once: https://docs.astral.sh/uv/getting-started/installation/
+
+```bash
+cd /path/to/geneline
+uv sync
+```
+
+That creates `.venv`, installs geneline in editable mode, and installs declared dependencies. Activate with `source .venv/bin/activate` (or run via `uv run ...` without activating).
+
+**Managing dependencies** — use uv so `pyproject.toml` and the venv update together:
+
+```bash
+uv add some-package       # declare + install
+uv remove some-package    # undeclare + uninstall
+uv sync                   # make the venv match pyproject.toml
+```
+
+**Option A — no install.** Prefix with `PYTHONPATH=src` if you skip the venv. Third-party deps still need to be available, so prefer `uv sync` for a full working env:
 
 ```bash
 cd /path/to/geneline
 PYTHONPATH=src python -m ...
 ```
 
-**Option B — install once.** Use a project venv (required on Debian/Ubuntu’s externally managed Python):
-
-```bash
-cd /path/to/geneline
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-```
-
-After that, plain `python -m ...` or the `geneline` console script work with no `PYTHONPATH`. Reactivate later with `source .venv/bin/activate`.
-
 ## Commands
+
+
 
 ### Unit tests
 
 ```bash
-unittest discover -s tests -v
+python -m unittest discover -s tests -v
 ```
+
+
 
 ### Mock smoke run
 
@@ -73,6 +85,8 @@ geneline \
   --runner mock \
   --out runs/mock
 ```
+
+
 
 ### OpenRouter run (default)
 
@@ -110,14 +124,20 @@ Each step is a data-processing stage. Prompts are task templates with exactly on
 }
 ```
 
+
+
 ## Outputs
 
-| File | Contents |
-|------|----------|
-| `best_genome.json` | Winning pipeline genome |
-| `best_result.json` | Score, response metrics, stop reason |
+
+| File                        | Contents                                         |
+| --------------------------- | ------------------------------------------------ |
+| `best_genome.json`          | Winning pipeline genome                          |
+| `best_result.json`          | Score, response metrics, stop reason             |
 | `generation_N_results.json` | All `{genome, score, response}` for generation N |
-| `history.json` | Compact per-generation summary + full results |
+| `history.json`              | Compact per-generation summary + full results    |
+
+
+
 
 ## Layout
 
@@ -140,8 +160,11 @@ src/geneline/
 runs/                    # Written artifacts (gitignored)
 ```
 
+
+
 ## Next hooks
 
 - Plug in a task-specific quality scorer instead of the lexical-overlap metric.
 - Allow prompt mutation once you want the genome’s text genes to evolve.
 - Optionally mutate model choice among a configured OpenRouter allow-list.
+

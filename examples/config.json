@@ -1,8 +1,8 @@
 {
   "runner": "openrouter",
   "population_size": 2,
-  "max_generations": 2,
-  "goal_score": 0.55,
+  "max_generations": 15,
+  "goal_score": 0.6,
   "min_score_to_breed": 0.05,
   "mutation_rate": 0.35,
   "mutation_scale": 0.15,
