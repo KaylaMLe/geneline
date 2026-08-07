@@ -1,12 +1,12 @@
 {
   "runner": "openrouter",
-  "population_size": 2,
+  "population_size": 15,
   "max_generations": 15,
   "goal_score": 0.6,
   "min_score_to_breed": 0.05,
   "mutation_rate": 0.35,
   "mutation_scale": 0.15,
-  "elite_count": 1,
+  "elite_count": 3,
   "weights": {
     "quality": 1.0,
     "latency": 0.25,
