@@ -193,6 +193,7 @@ class Tuner:
         best: ScoredGenome | None = None
         history: list[dict[str, Any]] = []
         stopped_reason = "max_generations_reached"
+        gens_without_improvement = 0
         steps_per_genome = max(1, len(seed_genome.steps))
         max_api_calls = (
             self.config.population_size
@@ -205,6 +206,7 @@ class Tuner:
             f"max_generations={self.config.max_generations}  "
             f"max_parallel_genomes={self.config.max_parallel_genomes}  "
             f"goal_score={self.config.goal_score}  "
+            f"patience={self.config.patience}  "
             f"steps/genome={steps_per_genome}  "
             f"up to ~{max_api_calls} model calls"
         )
@@ -222,11 +224,13 @@ class Tuner:
             mean_score = round(sum(item.score for item in results) / len(results), 4)
             if best is None or generation_best.score > best.score:
                 best = generation_best
+                gens_without_improvement = 0
                 progress.log(
                     f"generation {generation + 1}: new global best "
                     f"score={best.score} id={best.genome.id}  mean={mean_score}"
                 )
             else:
+                gens_without_improvement += 1
                 progress.log(
                     f"generation {generation + 1}: "
                     f"best_this_gen={generation_best.score}  "
@@ -248,6 +252,14 @@ class Tuner:
                 progress.log(
                     f"goal score {self.config.goal_score} reached "
                     f"(best={best.score}); stopping"
+                )
+                break
+
+            if gens_without_improvement >= self.config.patience:
+                stopped_reason = "no_improvement"
+                progress.log(
+                    f"no global-best improvement for {self.config.patience} "
+                    f"generation(s); stopping"
                 )
                 break
 

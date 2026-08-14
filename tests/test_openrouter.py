@@ -50,6 +50,32 @@ class OpenRouterParseTests(unittest.TestCase):
         self.assertGreater(result.latency_ms, 0)
         mocked.assert_called_once()
 
+    def test_run_step_falls_back_to_split_token_rates(self) -> None:
+        payload = {
+            "choices": [{"message": {"content": "77.00"}}],
+            "usage": {"prompt_tokens": 40, "completion_tokens": 12},
+        }
+        raw = json.dumps(payload).encode("utf-8")
+        mock_response = MagicMock()
+        mock_response.read.return_value = raw
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = False
+
+        runner = OpenRouterRunner(api_key="test-key")
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            result = runner.run_step(
+                model=ModelSpec(
+                    name="test",
+                    cost_per_input_token=0.000001,
+                    cost_per_output_token=0.000005,
+                ),
+                hyperparameters=Hyperparameters(temperature=0.3, top_p=0.9),
+                rendered_prompt="hello",
+            )
+
+        self.assertEqual(result.total_tokens, 52)
+        self.assertEqual(result.cost, 0.0001)
+
 
 if __name__ == "__main__":
     unittest.main()

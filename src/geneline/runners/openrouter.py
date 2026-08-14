@@ -87,8 +87,10 @@ class OpenRouterRunner:
 
         if "cost" in usage and usage["cost"] is not None:
             cost = float(usage["cost"])
-        else:
+        elif prompt_tokens or completion_tokens:
             cost = model.estimate_cost(prompt_tokens, completion_tokens)
+        else:
+            cost = total_tokens * model.cost_per_token
 
         return StepResult(
             message=message,

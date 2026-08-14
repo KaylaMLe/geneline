@@ -30,10 +30,10 @@ flowchart LR
 1. **cli** passes paths/args into **tuner** and prints run logs.
 2. **runners** execute each genome in the current generation against the input text → responses (`openrouter` by default; `mock` / `scripted` for offline tests). Genomes in a generation run **in parallel** (up to `max_parallel_genomes`); steps inside one genome stay sequential.
 3. **scorer** turns those responses into fitness scores.
-4. **evolver** breeds the next generation of genomes (hypers only) and the loop repeats.
+4. **evolver** breeds the next generation by selecting per-step model genes from the configured allow-list; the loop repeats.
 5. **utils** (`io`, `prompt`, `types`) are shared helpers used across the package.
 
-Pipeline topology, task prompts, and model names are immutable. Tunable genes: `temperature` and `top_p` only. Parallelism uses the stdlib thread pool — no extra packages beyond `uv sync`.
+MVP genomes keep topology, prompts, and hyperparameters fixed. The evolvable gene is the model assigned to each step. Parallelism uses the stdlib thread pool — no extra packages beyond `uv sync`.
 
 ## Setup
 
@@ -76,13 +76,14 @@ Tuner settings live in JSON (default: `examples/config.json`; mock: `examples/co
 | `weights.quality` / `weights.latency` / `weights.cost` | Fitness = quality − latency penalty − cost penalty |
 | `latency_ref_ms` / `cost_ref` | Scale for those penalties |
 | `quality.judge` | How final pipeline text is scored (see below) |
-| `mutation_rate` | Per-gene chance to nudge temperature or top_p (applied to every child) |
+| `mutation_rate` | Per-step chance to resample a model from the configured allow-list |
+| `patience` | Stop after this many generations without a new global best |
 
 **Quality judges** (`quality` object in config):
 
 | `quality.judge` | Behavior |
 |-----------------|----------|
-| `answer` (default) | Numeric ground-truth check. Path via `quality.answer_path` (example: `examples/quality.answer.json`). Defaults: **exact** match on the **final** output only. |
+| `answer` (default) | Numeric ground-truth check. Path via `quality.answer_path` (example: `examples/quality.answer.json`). Example file uses **distance** match plus optional **step** targets; omit those fields for exact final-only. |
 | `constraints` | Legacy offline rubric: required term groups, forbidden hedges, length caps |
 | `overlap` | Legacy bag-of-words overlap with a fixed reference claim (plus mock fidelity for `mock-*`) |
 | `llm` | Reserved for a future LLM-as-judge; raises `NotImplementedError` today |
@@ -92,7 +93,7 @@ Tuner settings live in JSON (default: `examples/config.json`; mock: `examples/co
 | Field | Default | Role |
 |-------|---------|------|
 | `expected` | required | Gold for the final pipeline text |
-| `match` | `exact` | `exact` = within `tolerance` pass/fail; `distance` = graded closeness |
+| `match` | `exact` | `exact` = within `tolerance` pass/fail; `distance` = graded closeness (example uses `distance`) |
 | `tolerance` | `0.01` | Exact band (also full-credit radius for `distance`) |
 | `distance_scale` | `30` | For `distance`: linear falloff to 0 beyond tolerance |
 | `require_bare_number` | `true` | `$` / prose halves the value score |
@@ -104,7 +105,7 @@ The default example averages shoe prices from an inventory in `message.txt` (syn
 
 **Latency:** each model call still records wall-clock latency in logs/JSON. Scoring **downweights** it in the OpenRouter example (`weights.latency: 0.05`) so API jitter does not dominate when quality already separates candidates. Set `"latency": 0` to ignore latency in the score entirely.
 
-**Cost:** prefers OpenRouter `usage.cost`, falling back to `total_tokens * cost_per_token` from the genome.
+**Cost:** prefers OpenRouter `usage.cost`, which includes input and output usage. If it is unavailable, geneline estimates cost from `prompt_tokens * cost_per_input_token + completion_tokens * cost_per_output_token`.
 
 ## Commands
 
@@ -153,12 +154,20 @@ Each step is a data-processing stage. Prompts are task templates with exactly on
   "steps": [
     {
       "prompt": "From the inventory below, get the average price of all shoes (...). Round to 2 decimal places. Reply with a plain number only — no dollar sign.\\n\\n{{input}}",
-      "model": { "name": "openai/gpt-4o-mini", "cost_per_token": 0.00000015 },
+      "model": {
+        "name": "openai/gpt-5.6-luna",
+        "cost_per_input_token": 0.0000001,
+        "cost_per_output_token": 0.0000006
+      },
       "hyperparameters": { "temperature": 0.4, "top_p": 0.9 }
     },
     {
       "prompt": "Take this average shoe price and add a 10% sales tax. Round to 2 decimal places. Reply with a plain number only — no dollar sign.\\n\\n{{input}}",
-      "model": { "name": "openai/gpt-4o-mini", "cost_per_token": 0.00000015 },
+      "model": {
+        "name": "openai/gpt-5.6-luna",
+        "cost_per_input_token": 0.0000001,
+        "cost_per_output_token": 0.0000006
+      },
       "hyperparameters": { "temperature": 0.3, "top_p": 0.9 }
     }
   ]
@@ -188,7 +197,7 @@ src/geneline/
   cli.py                 # CLI entrypoint
   tuner.py               # Main loop orchestration
   scorer.py              # Multi-objective fitness
-  evolver.py             # Selection, crossover, mutation (hypers only)
+  evolver.py             # Selection and model-gene mutation
   quality/               # Pluggable quality judges (answer, constraints, …)
   runners/
     __init__.py          # Protocol re-exports, run_pipeline, build_runner
@@ -204,9 +213,22 @@ runs/                    # Written artifacts (gitignored)
 
 
 
-## Next hooks
+## Roadmap
 
-- Implement the live LLM-as-judge path for open-ended tasks without a numeric gold answer.
-- Allow prompt mutation once you want the genome’s text genes to evolve.
-- Optionally mutate model choice among a configured OpenRouter allow-list.
+### Now: MVP model evolution
+
+- Keep topology, step order, prompts, and hyperparameters fixed.
+- Evolve each step's model from the configured allow-list.
+- Grade intermediate and final outputs with optional per-step answer targets.
+
+### Next
+
+- Add constrained prompt-text genes or a prompt-variant pool.
+- Add an optional hyperparameter fine-tuning pass after model and prompt selection.
+
+### Later
+
+- Evolve step count and ordering.
+- Add tool-using pipeline steps.
+- Implement an LLM-as-judge path for open-ended tasks.
 

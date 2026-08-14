@@ -96,6 +96,63 @@ class ParallelEvalTests(unittest.TestCase):
         self.assertGreaterEqual(result.generations_run, 1)
         self.assertIsNotNone(result.best)
 
+    def test_stops_after_configured_patience_without_improvement(self) -> None:
+        fixed_model = [MODELS[0]]
+        config = TunerConfig(
+            population_size=3,
+            max_generations=10,
+            goal_score=2.0,
+            max_parallel_genomes=3,
+            runner="mock",
+            seed=9,
+            models=fixed_model,
+            patience=1,
+            quality={"judge": "answer", "answer_path": ANSWER_PATH},
+        )
+        seed = _genome("seed")
+        for step in seed.steps:
+            step.model = fixed_model[0]
+
+        result = Tuner(config, runner=MockRunner(seed=9)).run(seed, EXAMPLE_MESSAGE)
+
+        self.assertEqual(result.stopped_reason, "no_improvement")
+        self.assertEqual(result.generations_run, 2)
+
+    def test_model_mutation_can_improve_mock_step_quality(self) -> None:
+        models = [
+            MODELS[0],
+            ModelSpec(
+                name="mock-quality",
+                cost_per_input_token=0.00005,
+                cost_per_output_token=0.00005,
+            ),
+        ]
+        config = TunerConfig(
+            population_size=6,
+            max_generations=1,
+            goal_score=2.0,
+            mutation_rate=1.0,
+            elite_count=0,
+            quality_weight=1.0,
+            latency_weight=0.0,
+            cost_weight=0.0,
+            runner="mock",
+            seed=42,
+            models=models,
+            quality={"judge": "answer", "answer_path": ANSWER_PATH},
+        )
+        seed = _genome("seed")
+        for step in seed.steps:
+            step.model = models[0]
+
+        result = Tuner(config, runner=MockRunner(seed=42)).run(seed, EXAMPLE_MESSAGE)
+
+        self.assertGreater(result.best.response.quality, 0.641)
+        self.assertIn(
+            "mock-quality",
+            [step.model.name for step in result.best.genome.steps],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
