@@ -1,0 +1,23 @@
+{
+  "required_terms": [
+    ["selection"],
+    ["crossover"],
+    ["mutation"],
+    ["fitness", "fitness goal"],
+    ["quality", "cost", "latency", "resource", "spend"]
+  ],
+  "forbidden_terms": [
+    "etc.",
+    "kinda",
+    "sort of",
+    "maybe",
+    "perhaps",
+    "roughly"
+  ],
+  "min_chars": 40,
+  "max_chars": 350,
+  "max_sentences": 2,
+  "required_weight": 0.7,
+  "structure_weight": 0.2,
+  "forbidden_weight": 0.1
+}

@@ -1,0 +1,40 @@
+{
+  "runner": "mock",
+  "population_size": 6,
+  "max_generations": 5,
+  "max_parallel_genomes": 4,
+  "goal_score": 0.85,
+  "min_score_to_breed": 0.05,
+  "mutation_rate": 0.35,
+  "elite_count": 1,
+  "patience": 5,
+  "weights": {
+    "quality": 1.0,
+    "latency": 0.25,
+    "cost": 0.25
+  },
+  "latency_ref_ms": 1500,
+  "cost_ref": 0.005,
+  "seed": 42,
+  "quality": {
+    "judge": "answer",
+    "answer_path": "examples/quality.answer.json"
+  },
+  "models": [
+    {
+      "name": "mock-fast",
+      "cost_per_input_token": 0.000002,
+      "cost_per_output_token": 0.000002
+    },
+    {
+      "name": "mock-balanced",
+      "cost_per_input_token": 0.00001,
+      "cost_per_output_token": 0.00001
+    },
+    {
+      "name": "mock-quality",
+      "cost_per_input_token": 0.00005,
+      "cost_per_output_token": 0.00005
+    }
+  ]
+}

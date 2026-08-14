@@ -11,11 +11,40 @@ from uuid import uuid4
 @dataclass
 class ModelSpec:
     name: str
-    cost_per_token: float
+    cost_per_input_token: float
+    cost_per_output_token: float
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ModelSpec:
-        return cls(name=data["name"], cost_per_token=float(data["cost_per_token"]))
+        name = str(data["name"])
+        if "cost_per_input_token" in data and "cost_per_output_token" in data:
+            return cls(
+                name=name,
+                cost_per_input_token=float(data["cost_per_input_token"]),
+                cost_per_output_token=float(data["cost_per_output_token"]),
+            )
+        if "cost_per_token" in data:
+            blended = float(data["cost_per_token"])
+            return cls(
+                name=name,
+                cost_per_input_token=blended,
+                cost_per_output_token=blended,
+            )
+        raise ValueError(
+            "model requires cost_per_input_token and cost_per_output_token "
+            "(or legacy cost_per_token)"
+        )
+
+    @property
+    def cost_per_token(self) -> float:
+        """Blended rate for legacy callers; prefer split fields for costing."""
+        return (self.cost_per_input_token + self.cost_per_output_token) / 2
+
+    def estimate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        return (
+            prompt_tokens * self.cost_per_input_token
+            + completion_tokens * self.cost_per_output_token
+        )
 
 
 @dataclass
@@ -36,7 +65,12 @@ class Hyperparameters:
 
 @dataclass
 class PipelineStep:
-    """One pipeline stage. Prompt is immutable for now."""
+    """One data-processing stage.
+
+    ``prompt`` is a fixed task template with exactly one ``{{input}}``
+    placeholder (not a role/system persona). Hypers are stable in the MVP;
+    model choice may evolve from a config allow-list.
+    """
 
     prompt: str
     model: ModelSpec
@@ -82,6 +116,7 @@ class Response:
     cost: float
     total_tokens: int
     quality: float
+    step_messages: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Response:
@@ -91,6 +126,7 @@ class Response:
             cost=float(data["cost"]),
             total_tokens=int(data["total_tokens"]),
             quality=float(data["quality"]),
+            step_messages=[str(m) for m in data.get("step_messages") or []],
         )
 
     def to_dict(self) -> dict[str, Any]:

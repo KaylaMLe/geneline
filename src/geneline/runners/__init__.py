@@ -1,0 +1,99 @@
+"""Pluggable pipeline runners: protocol, orchestration, and factory."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from geneline import progress
+from geneline.quality import QualityJudge, build_quality_judge
+from geneline.quality.protocol import QualityContext
+from geneline.runners.mock import MockRunner, ScriptedRunner
+from geneline.runners.openrouter import OpenRouterError, OpenRouterRunner, load_api_key
+from geneline.runners.protocol import Runner, StepResult
+from geneline.utils.prompt import render_prompt
+from geneline.utils.types import Genome, Response
+
+RunnerName = Literal["mock", "openrouter"]
+
+__all__ = [
+    "MockRunner",
+    "OpenRouterError",
+    "OpenRouterRunner",
+    "Runner",
+    "RunnerName",
+    "ScriptedRunner",
+    "StepResult",
+    "build_runner",
+    "load_api_key",
+    "run_pipeline",
+]
+
+
+def build_runner(name: RunnerName, *, seed: int = 0) -> Runner:
+    if name == "mock":
+        return MockRunner(seed=seed)
+    if name == "openrouter":
+        return OpenRouterRunner.from_env()
+    raise ValueError(f"unsupported runner: {name!r}")
+
+
+def run_pipeline(
+    runner: Runner,
+    genome: Genome,
+    message: str,
+    *,
+    label: str | None = None,
+    quality_judge: QualityJudge | None = None,
+) -> Response:
+    """Render {{input}} → run_step → chain outputs; aggregate metrics; score final text."""
+    if not genome.steps:
+        raise ValueError("genome must contain at least one step")
+
+    judge = quality_judge if quality_judge is not None else build_quality_judge()
+    prefix = f"{label} " if label else ""
+    incoming = message
+    total_latency = 0.0
+    total_cost = 0.0
+    total_tokens = 0
+    step_messages: list[str] = []
+    last_step = genome.steps[-1]
+
+    for step_index, step in enumerate(genome.steps, start=1):
+        progress.log(
+            f"    {prefix}step {step_index}/{len(genome.steps)} model={step.model.name}"
+        )
+        rendered = render_prompt(step.prompt, incoming)
+        result = runner.run_step(
+            model=step.model,
+            hyperparameters=step.hyperparameters.clamped(),
+            rendered_prompt=rendered,
+            label=label,
+        )
+        incoming = result.message
+        step_messages.append(result.message)
+        total_latency += result.latency_ms
+        total_cost += result.cost
+        total_tokens += result.total_tokens
+
+    final_message = step_messages[-1]
+    hp = last_step.hyperparameters.clamped()
+    quality = judge.score(
+        final_message,
+        context=QualityContext(
+            input_message=message,
+            genome=genome,
+            model=last_step.model,
+            temperature=hp.temperature,
+            top_p=hp.top_p,
+            step_messages=tuple(step_messages),
+        ),
+    )
+
+    return Response(
+        message=final_message,
+        latency_ms=round(total_latency, 2),
+        cost=round(total_cost, 8),
+        total_tokens=total_tokens,
+        quality=round(quality, 4),
+        step_messages=list(step_messages),
+    )

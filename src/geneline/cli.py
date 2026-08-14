@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from geneline.tuner import run_from_paths
+from geneline.tuner import RunnerName, run_from_paths
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,25 +37,40 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("runs/latest"),
         help="Directory for output JSON artifacts",
     )
+    parser.add_argument(
+        "--runner",
+        choices=("mock", "openrouter"),
+        default=None,
+        help="Override config runner (default: openrouter; use mock for offline)",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    result = run_from_paths(args.genome, args.message, args.config, args.out)
+    runner: RunnerName | None = args.runner
+    result = run_from_paths(
+        args.genome,
+        args.message,
+        args.config,
+        args.out,
+        runner=runner,
+    )
     best = result.best
-    step = best.genome.steps[-1]
     print(f"stopped: {result.stopped_reason} after {result.generations_run} generation(s)")
     print(f"best score: {best.score}")
-    print(f"best genome: {best.genome.id}")
+    print(f"best genome: {best.genome.id} ({len(best.genome.steps)} steps)")
+    for index, step in enumerate(best.genome.steps, start=1):
+        print(
+            f"  step {index}: model={step.model.name}  "
+            f"temp={step.hyperparameters.temperature:.3f}  "
+            f"top_p={step.hyperparameters.top_p:.3f}"
+        )
     print(
-        f"model={step.model.name}  "
-        f"temp={step.hyperparameters.temperature:.3f}  "
-        f"top_p={step.hyperparameters.top_p:.3f}"
+        f"quality={best.components.get('quality')}  "
+        f"latency_ms={best.response.latency_ms}  "
+        f"cost={best.response.cost}"
     )
-    print(f"quality={best.components.get('quality')}  "
-          f"latency_ms={best.response.latency_ms}  "
-          f"cost={best.response.cost}")
     print(f"wrote JSON outputs to {args.out}")
     return 0
 

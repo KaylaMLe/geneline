@@ -1,0 +1,11 @@
+{
+  "expected": 77,
+  "match": "distance",
+  "tolerance": 0.01,
+  "distance_scale": 30,
+  "require_bare_number": true,
+  "steps": [
+    { "expected": 70, "match": "distance" },
+    { "expected": 77, "match": "distance" }
+  ]
+}

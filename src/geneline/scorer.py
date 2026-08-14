@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from geneline.types import Response
+from geneline.utils.types import Response
 
 
 @dataclass
