@@ -1,7 +1,7 @@
 {
   "runner": "openrouter",
   "population_size": 15,
-  "max_generations": 15,
+  "max_generations": 50,
   "max_parallel_genomes": 8,
   "goal_score": 0.9,
   "min_score_to_breed": 0.05,

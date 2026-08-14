@@ -55,7 +55,7 @@ def run_pipeline(
     total_latency = 0.0
     total_cost = 0.0
     total_tokens = 0
-    final_message = ""
+    step_messages: list[str] = []
     last_step = genome.steps[-1]
 
     for step_index, step in enumerate(genome.steps, start=1):
@@ -70,11 +70,12 @@ def run_pipeline(
             label=label,
         )
         incoming = result.message
-        final_message = result.message
+        step_messages.append(result.message)
         total_latency += result.latency_ms
         total_cost += result.cost
         total_tokens += result.total_tokens
 
+    final_message = step_messages[-1]
     hp = last_step.hyperparameters.clamped()
     quality = judge.score(
         final_message,
@@ -84,6 +85,7 @@ def run_pipeline(
             model=last_step.model,
             temperature=hp.temperature,
             top_p=hp.top_p,
+            step_messages=tuple(step_messages),
         ),
     )
 
@@ -93,4 +95,5 @@ def run_pipeline(
         cost=round(total_cost, 8),
         total_tokens=total_tokens,
         quality=round(quality, 4),
+        step_messages=list(step_messages),
     )

@@ -87,6 +87,7 @@ class Response:
     cost: float
     total_tokens: int
     quality: float
+    step_messages: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Response:
@@ -96,6 +97,7 @@ class Response:
             cost=float(data["cost"]),
             total_tokens=int(data["total_tokens"]),
             quality=float(data["quality"]),
+            step_messages=[str(m) for m in data.get("step_messages") or []],
         )
 
     def to_dict(self) -> dict[str, Any]:

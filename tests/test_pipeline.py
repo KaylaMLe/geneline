@@ -60,6 +60,7 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(response.message, "77.00")
         self.assertEqual(response.quality, 1.0)
+        self.assertEqual(response.step_messages, ["70.00", "77.00"])
         self.assertEqual(response.latency_ms, 22.0)
         self.assertEqual(response.cost, 0.003)
         self.assertEqual(response.total_tokens, 42)

@@ -82,12 +82,25 @@ Tuner settings live in JSON (default: `examples/config.json`; mock: `examples/co
 
 | `quality.judge` | Behavior |
 |-----------------|----------|
-| `answer` (default) | Numeric ground-truth check. Path via `quality.answer_path` (example: `examples/quality.answer.json`). Perfect score requires a bare number (no `$`) within tolerance of `expected`. |
+| `answer` (default) | Numeric ground-truth check. Path via `quality.answer_path` (example: `examples/quality.answer.json`). Defaults: **exact** match on the **final** output only. |
 | `constraints` | Legacy offline rubric: required term groups, forbidden hedges, length caps |
 | `overlap` | Legacy bag-of-words overlap with a fixed reference claim (plus mock fidelity for `mock-*`) |
 | `llm` | Reserved for a future LLM-as-judge; raises `NotImplementedError` today |
 
-The default example averages shoe prices from an inventory in `message.txt` (synonyms like sneakers/heels; ignore accessories), then applies 10% tax. Step-1 average is `70`; **final** gold (what `AnswerJudge` scores) is `70 × 1.10 = 77` / `77.00`.
+**Answer judge options** (in `quality.answer.json` or inline under `quality`):
+
+| Field | Default | Role |
+|-------|---------|------|
+| `expected` | required | Gold for the final pipeline text |
+| `match` | `exact` | `exact` = within `tolerance` pass/fail; `distance` = graded closeness |
+| `tolerance` | `0.01` | Exact band (also full-credit radius for `distance`) |
+| `distance_scale` | `30` | For `distance`: linear falloff to 0 beyond tolerance |
+| `require_bare_number` | `true` | `$` / prose halves the value score |
+| `steps` | omitted | Optional per-step `{expected, match?, …}`; if set, quality is the mean of those step scores plus the final score |
+
+Pipeline responses always include `step_messages` (one string per step) for debugging; step scoring only applies when `steps` is configured.
+
+The default example averages shoe prices from an inventory in `message.txt` (synonyms like sneakers/heels; ignore accessories), then applies 10% tax. Step-1 average is `70`; **final** gold (what `AnswerJudge` scores by default) is `70 × 1.10 = 77` / `77.00`.
 
 **Latency:** each model call still records wall-clock latency in logs/JSON. Scoring **downweights** it in the OpenRouter example (`weights.latency: 0.05`) so API jitter does not dominate when quality already separates candidates. Set `"latency": 0` to ignore latency in the score entirely.
 

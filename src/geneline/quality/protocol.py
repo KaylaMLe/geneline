@@ -17,6 +17,7 @@ class QualityContext:
     model: ModelSpec | None = None
     temperature: float | None = None
     top_p: float | None = None
+    step_messages: tuple[str, ...] = ()
 
 
 class QualityJudge(Protocol):
