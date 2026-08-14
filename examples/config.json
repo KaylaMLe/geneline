@@ -8,6 +8,13 @@
   "mutation_rate": 0.35,
   "elite_count": 3,
   "patience": 5,
+  "hyper_phase": {
+    "enabled": true,
+    "max_generations": 15,
+    "patience": 5,
+    "temperature_sigma": 0.15,
+    "top_p_sigma": 0.08
+  },
   "weights": {
     "quality": 1.0,
     "latency": 0,

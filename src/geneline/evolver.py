@@ -1,16 +1,22 @@
 """Evolve the next generation from scored genomes.
 
-Topology, prompts, and hyperparameters stay fixed. Only per-step model
-choice mutates (from a config allow-list). Selection is score-weighted;
-crossover inherits models from the fitter parent.
+Phase ``models``: topology, prompts, and hyperparameters stay fixed; only
+per-step model choice mutates (from a config allow-list).
+
+Phase ``hypers``: models and prompts stay fixed; temperature / top_p jitter.
+
+Selection is score-weighted; crossover inherits genes from the fitter parent.
 """
 
 from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from typing import Literal
 
-from geneline.utils.types import Genome, ModelSpec, PipelineStep, ScoredGenome
+from geneline.utils.types import Genome, Hyperparameters, ModelSpec, PipelineStep, ScoredGenome
+
+GeneMode = Literal["models", "hypers"]
 
 
 @dataclass
@@ -20,17 +26,22 @@ class Evolver:
     mutation_rate: float = 0.35
     min_score_to_breed: float = 0.2
     elite_count: int = 1
+    gene: GeneMode = "models"
+    temperature_sigma: float = 0.15
+    top_p_sigma: float = 0.08
     rng: random.Random | None = None
 
     def __post_init__(self) -> None:
         self.rng = self.rng or random.Random()
         if self.population_size < 1:
             raise ValueError("population_size must be >= 1")
-        if not self.models:
+        if self.gene not in ("models", "hypers"):
+            raise ValueError(f"unsupported gene mode: {self.gene!r}")
+        if self.gene == "models" and not self.models:
             raise ValueError("evolver requires a non-empty models allow-list")
 
     def seed_population(self, seed: Genome) -> list[Genome]:
-        """Keep the user genome, then fill the pool by mutating models only."""
+        """Keep the user genome, then fill the pool by mutating active genes."""
         population = [seed.clone(new_id=False)]
         while len(population) < self.population_size:
             population.append(self.mutate(seed.clone()))
@@ -63,7 +74,7 @@ class Evolver:
         return next_pop
 
     def crossover(self, fitter: Genome, weaker: Genome) -> Genome:
-        """Inherit each step's model from the fitter parent; keep prompts/hypers."""
+        """Inherit active genes from the fitter parent; copy the rest."""
         del weaker  # fitness pressure is selection + fitter inheritance
         if not fitter.steps:
             raise ValueError("crossover requires at least one step")
@@ -83,16 +94,25 @@ class Evolver:
         return Genome(steps=steps)
 
     def mutate(self, genome: Genome) -> Genome:
-        """Resample step models from the allow-list; never touch prompt or hypers."""
+        """Mutate only the active gene mode; leave other fields untouched."""
         child = genome.clone()
         for step in child.steps:
-            if self.rng.random() < self.mutation_rate:
+            if self.rng.random() >= self.mutation_rate:
+                continue
+            if self.gene == "models":
                 pick = self.rng.choice(self.models)
                 step.model = ModelSpec(
                     name=pick.name,
                     cost_per_input_token=pick.cost_per_input_token,
                     cost_per_output_token=pick.cost_per_output_token,
                 )
+            else:
+                hp = step.hyperparameters
+                step.hyperparameters = Hyperparameters(
+                    temperature=hp.temperature
+                    + self.rng.gauss(0.0, self.temperature_sigma),
+                    top_p=hp.top_p + self.rng.gauss(0.0, self.top_p_sigma),
+                ).clamped()
         return child
 
     def _weighted_pick(self, pool: list[ScoredGenome]) -> ScoredGenome:

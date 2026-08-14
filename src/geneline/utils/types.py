@@ -68,8 +68,8 @@ class PipelineStep:
     """One data-processing stage.
 
     ``prompt`` is a fixed task template with exactly one ``{{input}}``
-    placeholder (not a role/system persona). Hypers are stable in the MVP;
-    model choice may evolve from a config allow-list.
+    placeholder (not a role/system persona). Model choice evolves first;
+    hypers may be fine-tuned in a second phase with models frozen.
     """
 
     prompt: str

@@ -30,10 +30,10 @@ flowchart LR
 1. **cli** passes paths/args into **tuner** and prints run logs.
 2. **runners** execute each genome in the current generation against the input text → responses (`openrouter` by default; `mock` / `scripted` for offline tests). Genomes in a generation run **in parallel** (up to `max_parallel_genomes`); steps inside one genome stay sequential.
 3. **scorer** turns those responses into fitness scores.
-4. **evolver** breeds the next generation by selecting per-step model genes from the configured allow-list; the loop repeats.
+4. **evolver** breeds the next generation by mutating the active gene (models first, then optional hypers); the loop repeats.
 5. **utils** (`io`, `prompt`, `types`) are shared helpers used across the package.
 
-MVP genomes keep topology, prompts, and hyperparameters fixed. The evolvable gene is the model assigned to each step. Parallelism uses the stdlib thread pool — no extra packages beyond `uv sync`.
+Topology and prompts stay fixed. The tuner first evolves each step’s model from the allow-list, then optionally runs a second phase that freezes those models and fine-tunes `temperature` / `top_p`. Parallelism uses the stdlib thread pool — no extra packages beyond `uv sync`.
 
 ## Setup
 
@@ -70,14 +70,25 @@ Tuner settings live in JSON (default: `examples/config.json`; mock: `examples/co
 | Key | Role |
 |-----|------|
 | `runner` | `openrouter` (default) or `mock` |
-| `population_size` / `max_generations` | Search budget |
+| `population_size` / `max_generations` | Search budget for the **model** phase |
 | `max_parallel_genomes` | Cap concurrent genome evals within a generation |
-| `goal_score` | Early stop when best score reaches this |
+| `goal_score` | Early stop when best score reaches this (both phases) |
 | `weights.quality` / `weights.latency` / `weights.cost` | Fitness = quality − latency penalty − cost penalty |
 | `latency_ref_ms` / `cost_ref` | Scale for those penalties |
 | `quality.judge` | How final pipeline text is scored (see below) |
-| `mutation_rate` | Per-step chance to resample a model from the configured allow-list |
-| `patience` | Stop after this many generations without a new global best |
+| `mutation_rate` | Per-step chance to mutate the active gene (model or hypers) |
+| `patience` | Model-phase stop after this many generations without a new global best |
+| `hyper_phase` | Optional second phase: freeze models, jitter `temperature` / `top_p` |
+
+`hyper_phase` object (OpenRouter example enables it):
+
+| Key | Role |
+|-----|------|
+| `enabled` | Run hypers fine-tuning after the model phase |
+| `max_generations` / `patience` | Budget and plateau stop for the hypers phase |
+| `temperature_sigma` / `top_p_sigma` | Gaussian mutation noise (then clamp) |
+
+The OpenRouter example sets `goal_score` to `1.0` so soft fitness thresholds do not halt search while cost is still in the objective; plateau detection uses `patience` (per phase).
 
 **Quality judges** (`quality` object in config):
 
@@ -215,16 +226,16 @@ runs/                    # Written artifacts (gitignored)
 
 ## Roadmap
 
-### Now: MVP model evolution
+### Done / now
 
-- Keep topology, step order, prompts, and hyperparameters fixed.
-- Evolve each step's model from the configured allow-list.
-- Grade intermediate and final outputs with optional per-step answer targets.
+- Model-gene MVP: evolve each step’s model from the allow-list; topology and prompts fixed.
+- Optional per-step answer targets; patience early-stop; parallel genome eval.
+- Multi-phase hypers: after models lock, fine-tune `temperature` / `top_p` only.
 
-### Next
+### Next: prompt evolution (not implemented)
 
-- Add constrained prompt-text genes or a prompt-variant pool.
-- Add an optional hyperparameter fine-tuning pass after model and prompt selection.
+- **Prompt-variant pool:** hand-authored alternatives per step; GA picks like models; scored by pipeline task fitness.
+- **Critique → revise → eval:** LLM proposes edits via critique then revision (~3× API cost per mutation attempt). Still scored by task fitness, not prompt-specific weights. Higher risk — needs more design before coding.
 
 ### Later
 

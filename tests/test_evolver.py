@@ -1,4 +1,4 @@
-"""Tests for model-gene evolution."""
+"""Tests for model-gene and hypers-gene evolution."""
 
 from __future__ import annotations
 
@@ -48,6 +48,7 @@ class EvolverModelGeneTests(unittest.TestCase):
             models=MODELS,
             mutation_rate=1.0,
             elite_count=0,
+            gene="models",
             rng=random.Random(0),
         )
         parent = _genome(temp=0.5, top_p=0.5)
@@ -60,6 +61,58 @@ class EvolverModelGeneTests(unittest.TestCase):
 
     def test_crossover_inherits_fitter_models(self) -> None:
         evolver = Evolver(population_size=2, models=MODELS, rng=random.Random(0))
+        fitter = _genome(MODELS[1], temp=0.3, top_p=0.8)
+        weaker = _genome(MODELS[0], temp=0.7, top_p=0.5)
+        child = evolver.crossover(fitter, weaker)
+
+        self.assertEqual(
+            [step.model.name for step in child.steps],
+            ["mock-quality", "mock-quality"],
+        )
+        self.assertEqual(
+            [step.hyperparameters for step in child.steps],
+            [step.hyperparameters for step in fitter.steps],
+        )
+
+
+class EvolverHypersGeneTests(unittest.TestCase):
+    def test_mutation_changes_hypers_but_preserves_models_and_prompts(self) -> None:
+        evolver = Evolver(
+            population_size=4,
+            models=MODELS,
+            mutation_rate=1.0,
+            elite_count=0,
+            gene="hypers",
+            temperature_sigma=0.5,
+            top_p_sigma=0.2,
+            rng=random.Random(1),
+        )
+        parent = _genome(MODELS[1], temp=0.4, top_p=0.9)
+        child = evolver.mutate(parent)
+
+        changed = False
+        for original, mutated in zip(parent.steps, child.steps, strict=True):
+            self.assertEqual(mutated.prompt, original.prompt)
+            self.assertEqual(mutated.model.name, original.model.name)
+            self.assertEqual(
+                mutated.model.cost_per_input_token,
+                original.model.cost_per_input_token,
+            )
+            if mutated.hyperparameters != original.hyperparameters:
+                changed = True
+            self.assertGreaterEqual(mutated.hyperparameters.temperature, 0.0)
+            self.assertLessEqual(mutated.hyperparameters.temperature, 2.0)
+            self.assertGreaterEqual(mutated.hyperparameters.top_p, 0.01)
+            self.assertLessEqual(mutated.hyperparameters.top_p, 1.0)
+        self.assertTrue(changed)
+
+    def test_crossover_inherits_fitter_hypers_and_models(self) -> None:
+        evolver = Evolver(
+            population_size=2,
+            models=MODELS,
+            gene="hypers",
+            rng=random.Random(0),
+        )
         fitter = _genome(MODELS[1], temp=0.3, top_p=0.8)
         weaker = _genome(MODELS[0], temp=0.7, top_p=0.5)
         child = evolver.crossover(fitter, weaker)

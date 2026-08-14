@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from geneline.runners import MockRunner
-from geneline.tuner import Tuner, TunerConfig
+from geneline.tuner import HyperPhaseConfig, Tuner, TunerConfig
 from geneline.utils.io import read_json
 from geneline.utils.types import Genome, Hyperparameters, ModelSpec, PipelineStep
 
@@ -152,6 +152,55 @@ class ParallelEvalTests(unittest.TestCase):
             "mock-quality",
             [step.model.name for step in result.best.genome.steps],
         )
+
+    def test_hyper_phase_keeps_models_locked_and_tags_history(self) -> None:
+        fixed = [
+            ModelSpec(
+                name="mock-balanced",
+                cost_per_input_token=0.00001,
+                cost_per_output_token=0.00001,
+            )
+        ]
+        config = TunerConfig(
+            population_size=3,
+            max_generations=1,
+            goal_score=2.0,
+            max_parallel_genomes=3,
+            runner="mock",
+            seed=11,
+            models=fixed,
+            patience=5,
+            mutation_rate=1.0,
+            quality={"judge": "answer", "answer_path": ANSWER_PATH},
+            hyper_phase=HyperPhaseConfig(
+                enabled=True,
+                max_generations=2,
+                patience=5,
+                temperature_sigma=0.4,
+                top_p_sigma=0.2,
+            ),
+        )
+        seed = _genome("seed")
+        for step in seed.steps:
+            step.model = ModelSpec(
+                name="mock-balanced",
+                cost_per_input_token=0.00001,
+                cost_per_output_token=0.00001,
+            )
+
+        result = Tuner(config, runner=MockRunner(seed=11)).run(seed, EXAMPLE_MESSAGE)
+
+        phases = [entry["phase"] for entry in result.history]
+        self.assertIn("models", phases)
+        self.assertIn("hypers", phases)
+        self.assertGreaterEqual(phases.count("hypers"), 1)
+
+        for entry in result.history:
+            if entry["phase"] != "hypers":
+                continue
+            for scored in entry["results"]:
+                names = [step["model"]["name"] for step in scored["genome"]["steps"]]
+                self.assertEqual(names, ["mock-balanced", "mock-balanced"])
 
 
 if __name__ == "__main__":
