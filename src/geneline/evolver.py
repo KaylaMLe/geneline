@@ -1,22 +1,23 @@
 """Evolve the next generation from scored genomes.
 
-Topology, prompts, and models stay fixed. Only temperature / top_p mutate.
-Selection uses score-weighted parents with a minimum-score exclusion floor.
+Topology, prompts, and hyperparameters stay fixed. Only per-step model
+choice mutates (from a config allow-list). Selection is score-weighted;
+crossover inherits models from the fitter parent.
 """
 
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from geneline.utils.types import Genome, Hyperparameters, ModelSpec, PipelineStep, ScoredGenome
+from geneline.utils.types import Genome, ModelSpec, PipelineStep, ScoredGenome
 
 
 @dataclass
 class Evolver:
     population_size: int
+    models: list[ModelSpec] = field(default_factory=list)
     mutation_rate: float = 0.35
-    mutation_scale: float = 0.15
     min_score_to_breed: float = 0.2
     elite_count: int = 1
     rng: random.Random | None = None
@@ -25,9 +26,11 @@ class Evolver:
         self.rng = self.rng or random.Random()
         if self.population_size < 1:
             raise ValueError("population_size must be >= 1")
+        if not self.models:
+            raise ValueError("evolver requires a non-empty models allow-list")
 
     def seed_population(self, seed: Genome) -> list[Genome]:
-        """Wrap the user genome as generation 0, then mutate hypers to fill the pool."""
+        """Keep the user genome, then fill the pool by mutating models only."""
         population = [seed.clone(new_id=False)]
         while len(population) < self.population_size:
             population.append(self.mutate(seed.clone()))
@@ -49,49 +52,47 @@ class Evolver:
         while len(next_pop) < self.population_size:
             parent_a = self._weighted_pick(breedable)
             parent_b = self._weighted_pick(breedable)
-            child = self.crossover(parent_a.genome, parent_b.genome)
+            if parent_a.score >= parent_b.score:
+                fitter, weaker = parent_a, parent_b
+            else:
+                fitter, weaker = parent_b, parent_a
+            child = self.crossover(fitter.genome, weaker.genome)
             child = self.mutate(child)
             next_pop.append(child)
 
         return next_pop
 
-    def crossover(self, a: Genome, b: Genome) -> Genome:
-        """Average hypers per step; copy prompt + model from A (fixed topology)."""
-        if len(a.steps) != len(b.steps):
-            raise ValueError(
-                f"crossover requires equal step counts, got {len(a.steps)} and {len(b.steps)}"
-            )
+    def crossover(self, fitter: Genome, weaker: Genome) -> Genome:
+        """Inherit each step's model from the fitter parent; keep prompts/hypers."""
+        del weaker  # fitness pressure is selection + fitter inheritance
+        if not fitter.steps:
+            raise ValueError("crossover requires at least one step")
         steps: list[PipelineStep] = []
-        for step_a, step_b in zip(a.steps, b.steps, strict=True):
-            temperature = (step_a.hyperparameters.temperature + step_b.hyperparameters.temperature) / 2
-            top_p = (step_a.hyperparameters.top_p + step_b.hyperparameters.top_p) / 2
+        for step in fitter.steps:
             steps.append(
                 PipelineStep(
-                    prompt=step_a.prompt,
+                    prompt=step.prompt,
                     model=ModelSpec(
-                        name=step_a.model.name,
-                        cost_per_token=step_a.model.cost_per_token,
+                        name=step.model.name,
+                        cost_per_input_token=step.model.cost_per_input_token,
+                        cost_per_output_token=step.model.cost_per_output_token,
                     ),
-                    hyperparameters=Hyperparameters(
-                        temperature=temperature, top_p=top_p
-                    ).clamped(),
+                    hyperparameters=step.hyperparameters.clamped(),
                 )
             )
         return Genome(steps=steps)
 
     def mutate(self, genome: Genome) -> Genome:
-        """Nudge temperature / top_p only — never prompt or model."""
+        """Resample step models from the allow-list; never touch prompt or hypers."""
         child = genome.clone()
         for step in child.steps:
             if self.rng.random() < self.mutation_rate:
-                step.hyperparameters.temperature += self.rng.uniform(
-                    -self.mutation_scale, self.mutation_scale
+                pick = self.rng.choice(self.models)
+                step.model = ModelSpec(
+                    name=pick.name,
+                    cost_per_input_token=pick.cost_per_input_token,
+                    cost_per_output_token=pick.cost_per_output_token,
                 )
-            if self.rng.random() < self.mutation_rate:
-                step.hyperparameters.top_p += self.rng.uniform(
-                    -self.mutation_scale, self.mutation_scale
-                )
-            step.hyperparameters = step.hyperparameters.clamped()
         return child
 
     def _weighted_pick(self, pool: list[ScoredGenome]) -> ScoredGenome:

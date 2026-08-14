@@ -35,7 +35,11 @@ class OpenRouterParseTests(unittest.TestCase):
         runner = OpenRouterRunner(api_key="test-key")
         with patch("urllib.request.urlopen", return_value=mock_response) as mocked:
             result = runner.run_step(
-                model=ModelSpec(name="openai/gpt-4o-mini", cost_per_token=0.00000015),
+                model=ModelSpec(
+                    name="openai/gpt-4o-mini",
+                    cost_per_input_token=0.00000015,
+                    cost_per_output_token=0.00000015,
+                ),
                 hyperparameters=Hyperparameters(temperature=0.3, top_p=0.9),
                 rendered_prompt="Extract the main claim from this text: hello",
             )

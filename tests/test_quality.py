@@ -28,7 +28,11 @@ def _ctx(
 ) -> QualityContext:
     return QualityContext(
         input_message=EXAMPLE_MESSAGE,
-        model=ModelSpec(name=model_name, cost_per_token=0.00000015),
+        model=ModelSpec(
+            name=model_name,
+            cost_per_input_token=0.00000015,
+            cost_per_output_token=0.00000015,
+        ),
         temperature=0.3,
         top_p=0.9,
         step_messages=step_messages,
@@ -37,7 +41,15 @@ def _ctx(
 
 class AnswerJudgeTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.judge = AnswerJudge.from_path(ANSWER_PATH)
+        # Exact final-only — independent of examples/quality.answer.json defaults.
+        self.judge = AnswerJudge.from_dict(
+            {
+                "expected": 77,
+                "match": "exact",
+                "tolerance": 0.01,
+                "require_bare_number": True,
+            }
+        )
 
     def test_exact_bare_number_scores_perfect(self) -> None:
         self.assertEqual(self.judge.score("77.00", context=_ctx()), 1.0)
@@ -134,13 +146,13 @@ class OverlapJudgeTests(unittest.TestCase):
 
 
 class BuildJudgeTests(unittest.TestCase):
-    def test_default_is_answer(self) -> None:
+    def test_example_answer_config_is_distance_with_steps(self) -> None:
         judge = build_quality_judge(
             {"judge": "answer", "answer_path": str(ANSWER_PATH)}
         )
         self.assertIsInstance(judge, AnswerJudge)
-        self.assertEqual(judge.match, "exact")
-        self.assertEqual(judge.steps, [])
+        self.assertEqual(judge.match, "distance")
+        self.assertEqual(len(judge.steps), 2)
 
     def test_llm_stub_raises(self) -> None:
         with self.assertRaises(NotImplementedError):

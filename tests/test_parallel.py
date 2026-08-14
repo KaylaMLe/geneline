@@ -15,6 +15,18 @@ EXAMPLE_MESSAGE = (ROOT / "examples" / "message.txt").read_text(encoding="utf-8"
 ANSWER_PATH = str(ROOT / "examples" / "quality.answer.json")
 SEED_PROMPT = Genome.from_dict(read_json(ROOT / "examples" / "genome.mock.json")).steps[0].prompt
 TAX_PROMPT = Genome.from_dict(read_json(ROOT / "examples" / "genome.mock.json")).steps[1].prompt
+MODELS = [
+    ModelSpec(
+        name="mock-fast",
+        cost_per_input_token=0.000002,
+        cost_per_output_token=0.000002,
+    ),
+    ModelSpec(
+        name="mock-balanced",
+        cost_per_input_token=0.00001,
+        cost_per_output_token=0.00001,
+    ),
+]
 
 
 def _genome(genome_id: str, temp: float = 0.4) -> Genome:
@@ -23,12 +35,20 @@ def _genome(genome_id: str, temp: float = 0.4) -> Genome:
         steps=[
             PipelineStep(
                 prompt=SEED_PROMPT,
-                model=ModelSpec(name="mock-balanced", cost_per_token=0.00001),
+                model=ModelSpec(
+                    name="mock-balanced",
+                    cost_per_input_token=0.00001,
+                    cost_per_output_token=0.00001,
+                ),
                 hyperparameters=Hyperparameters(temperature=temp, top_p=0.9),
             ),
             PipelineStep(
                 prompt=TAX_PROMPT,
-                model=ModelSpec(name="mock-fast", cost_per_token=0.000002),
+                model=ModelSpec(
+                    name="mock-fast",
+                    cost_per_input_token=0.000002,
+                    cost_per_output_token=0.000002,
+                ),
                 hyperparameters=Hyperparameters(temperature=0.3, top_p=0.9),
             ),
         ],
@@ -44,6 +64,7 @@ class ParallelEvalTests(unittest.TestCase):
             max_parallel_genomes=4,
             runner="mock",
             seed=7,
+            models=MODELS,
             quality={"judge": "answer", "answer_path": ANSWER_PATH},
         )
         tuner = Tuner(config, runner=MockRunner(seed=7))
@@ -66,6 +87,7 @@ class ParallelEvalTests(unittest.TestCase):
             max_parallel_genomes=3,
             runner="mock",
             seed=3,
+            models=MODELS,
             min_score_to_breed=0.0,
             quality={"judge": "answer", "answer_path": ANSWER_PATH},
         )

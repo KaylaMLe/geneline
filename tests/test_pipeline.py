@@ -20,7 +20,11 @@ EXAMPLE_GENOME = Genome.from_dict(read_json(ROOT / "examples" / "genome.mock.jso
 def _step(prompt: str, model: str = "mock-fast") -> PipelineStep:
     return PipelineStep(
         prompt=prompt,
-        model=ModelSpec(name=model, cost_per_token=0.000002),
+        model=ModelSpec(
+            name=model,
+            cost_per_input_token=0.000002,
+            cost_per_output_token=0.000002,
+        ),
         hyperparameters=Hyperparameters(temperature=0.3, top_p=0.9),
     )
 
@@ -68,7 +72,11 @@ class PipelineTests(unittest.TestCase):
 
     def test_mock_runner_is_deterministic_for_same_request(self) -> None:
         runner = MockRunner(seed=7)
-        model = ModelSpec(name="mock-balanced", cost_per_token=0.00001)
+        model = ModelSpec(
+            name="mock-balanced",
+            cost_per_input_token=0.00001,
+            cost_per_output_token=0.00001,
+        )
         hp = Hyperparameters(temperature=0.4, top_p=0.9)
         prompt = EXAMPLE_GENOME.steps[0].prompt.replace("{{input}}", EXAMPLE_MESSAGE)
         a = runner.run_step(model=model, hyperparameters=hp, rendered_prompt=prompt)

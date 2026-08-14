@@ -18,7 +18,7 @@ from geneline.utils.types import Hyperparameters, ModelSpec
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 ENV_API_KEY = "OPENROUTER_API_KEY"
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 class OpenRouterError(RuntimeError):
@@ -79,16 +79,16 @@ class OpenRouterRunner:
 
         message = _extract_message(data)
         usage = data.get("usage") or {}
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
         total_tokens = int(usage.get("total_tokens") or 0)
         if total_tokens <= 0:
-            prompt_tokens = int(usage.get("prompt_tokens") or 0)
-            completion_tokens = int(usage.get("completion_tokens") or 0)
             total_tokens = prompt_tokens + completion_tokens
 
         if "cost" in usage and usage["cost"] is not None:
             cost = float(usage["cost"])
         else:
-            cost = total_tokens * model.cost_per_token
+            cost = model.estimate_cost(prompt_tokens, completion_tokens)
 
         return StepResult(
             message=message,

@@ -6,8 +6,8 @@
   "goal_score": 0.9,
   "min_score_to_breed": 0.05,
   "mutation_rate": 0.35,
-  "mutation_scale": 0.15,
   "elite_count": 3,
+  "patience": 5,
   "weights": {
     "quality": 1.0,
     "latency": 0,
@@ -21,6 +21,20 @@
     "answer_path": "examples/quality.answer.json"
   },
   "models": [
-    { "name": "openai/gpt-4o-mini", "cost_per_token": 0.00000015 }
+    {
+      "name": "google/gemini-3.7-flash",
+      "cost_per_input_token": 0.000000375,
+      "cost_per_output_token": 0.000001875
+    },
+    {
+      "name": "openai/gpt-5.6-luna",
+      "cost_per_input_token": 0.0000001,
+      "cost_per_output_token": 0.0000006
+    },
+    {
+      "name": "anthropic/claude-haiku-4.5",
+      "cost_per_input_token": 0.000001,
+      "cost_per_output_token": 0.000005
+    }
   ]
 }

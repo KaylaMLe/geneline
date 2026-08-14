@@ -24,7 +24,6 @@ class TunerConfig:
     goal_score: float = 0.92
     min_score_to_breed: float = 0.2
     mutation_rate: float = 0.35
-    mutation_scale: float = 0.15
     elite_count: int = 1
     quality_weight: float = 1.0
     latency_weight: float = 0.25
@@ -35,13 +34,18 @@ class TunerConfig:
     models: list[ModelSpec] | None = None
     runner: RunnerName = "openrouter"
     max_parallel_genomes: int = 8
+    patience: int = 5
     quality: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TunerConfig:
         weights = data.get("weights", {})
         models_raw = data.get("models") or [
-            {"name": "openai/gpt-4o-mini", "cost_per_token": 0.00000015},
+            {
+                "name": "openai/gpt-5.6-luna",
+                "cost_per_input_token": 0.0000001,
+                "cost_per_output_token": 0.0000006,
+            },
         ]
         runner = str(data.get("runner", "openrouter")).lower()
         if runner not in ("mock", "openrouter"):
@@ -55,7 +59,6 @@ class TunerConfig:
             goal_score=float(data.get("goal_score", 0.92)),
             min_score_to_breed=float(data.get("min_score_to_breed", 0.2)),
             mutation_rate=float(data.get("mutation_rate", 0.35)),
-            mutation_scale=float(data.get("mutation_scale", 0.15)),
             elite_count=int(data.get("elite_count", 1)),
             quality_weight=float(weights.get("quality", data.get("quality_weight", 1.0))),
             latency_weight=float(weights.get("latency", data.get("latency_weight", 0.25))),
@@ -66,6 +69,7 @@ class TunerConfig:
             models=[ModelSpec.from_dict(item) for item in models_raw],
             runner=runner,  # type: ignore[arg-type]
             max_parallel_genomes=max(1, int(data.get("max_parallel_genomes", 8))),
+            patience=max(1, int(data.get("patience", 5))),
             quality=quality,
         )
 
@@ -104,8 +108,8 @@ class Tuner:
         )
         self.evolver = Evolver(
             population_size=config.population_size,
+            models=config.models or [],
             mutation_rate=config.mutation_rate,
-            mutation_scale=config.mutation_scale,
             min_score_to_breed=config.min_score_to_breed,
             elite_count=config.elite_count,
             rng=self.rng,

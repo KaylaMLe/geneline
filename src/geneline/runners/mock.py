@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 import random
 from dataclasses import dataclass
 
@@ -44,7 +43,7 @@ class MockRunner:
         prompt_tokens = max(1, len(rendered_prompt.split()))
         completion_tokens = self._completion_tokens(model, hp.temperature, rng)
         total_tokens = prompt_tokens + completion_tokens
-        cost = total_tokens * model.cost_per_token
+        cost = model.estimate_cost(prompt_tokens, completion_tokens)
 
         base_latency = {
             "mock-fast": 180.0,
@@ -54,7 +53,7 @@ class MockRunner:
         jitter = (rng.random() * 120.0) - 40.0 + (hp.temperature * 35.0)
         latency_ms = max(50.0, base_latency + jitter + (completion_tokens * 1.5))
 
-        text = self._generate_text(model, hp.temperature, hp.top_p, rendered_prompt, rng)
+        text = self._generate_text(model, rendered_prompt, rng)
 
         return StepResult(
             message=text,
@@ -72,12 +71,10 @@ class MockRunner:
     def _generate_text(
         self,
         model: ModelSpec,
-        temperature: float,
-        top_p: float,
         rendered_prompt: str,
         rng: random.Random,
     ) -> str:
-        fidelity = mock_fidelity(model, temperature, top_p)
+        fidelity = mock_fidelity(model)
         lower = rendered_prompt.lower()
         is_tax = "sales tax" in lower or "10%" in lower
         is_average = "average" in lower and "shoe" in lower
@@ -128,12 +125,10 @@ class ScriptedRunner:
         )
 
 
-def mock_fidelity(model: ModelSpec, temperature: float, top_p: float) -> float:
-    model_boost = {
-        "mock-fast": 0.62,
-        "mock-balanced": 0.78,
-        "mock-quality": 0.9,
-    }.get(model.name, 0.7)
-    temp_term = math.exp(-((temperature - 0.3) ** 2) / (2 * 0.25**2))
-    top_p_term = math.exp(-((top_p - 0.92) ** 2) / (2 * 0.12**2))
-    return max(0.05, min(1.0, model_boost * (0.55 + 0.25 * temp_term + 0.2 * top_p_term)))
+def mock_fidelity(model: ModelSpec) -> float:
+    """Deterministic model capability proxy for offline model-gene tests."""
+    return {
+        "mock-fast": 0.45,
+        "mock-balanced": 0.72,
+        "mock-quality": 0.96,
+    }.get(model.name, 0.6)
