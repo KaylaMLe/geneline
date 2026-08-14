@@ -3,7 +3,7 @@
   "population_size": 15,
   "max_generations": 50,
   "max_parallel_genomes": 8,
-  "goal_score": 0.9,
+  "goal_score": 1.0,
   "min_score_to_breed": 0.05,
   "mutation_rate": 0.35,
   "elite_count": 3,

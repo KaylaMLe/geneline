@@ -4,7 +4,7 @@
     {
       "prompt": "From the inventory below, get the average price of all footwear. Round to 2 decimal places. Reply with a plain number only — no dollar sign.\n\n{{input}}",
       "model": {
-        "name": "openai/gpt-5.6-luna",
+        "name": "anthropic/claude-haiku-4.5",
         "cost_per_input_token": 0.0000001,
         "cost_per_output_token": 0.0000006
       },
@@ -16,7 +16,7 @@
     {
       "prompt": "Take this average price and add a 10% sales tax. Round to 2 decimal places. Reply with a plain number only — no dollar sign.\n\n{{input}}",
       "model": {
-        "name": "openai/gpt-5.6-luna",
+        "name": "anthropic/claude-haiku-4.5",
         "cost_per_input_token": 0.0000001,
         "cost_per_output_token": 0.0000006
       },
